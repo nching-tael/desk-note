@@ -173,8 +173,14 @@ def summarise(name: str, inp: dict[str, Any]) -> str:
     if name == "get_upcoming_events":
         return f"Checked earnings dates in the next {inp.get('days', 30)} days"
     if name == "get_chart":
-        target = f" for {str(inp['symbol']).upper()}" if inp.get("symbol") else ""
-        return f"Drew a {str(inp.get('kind', 'chart')).replace('_', ' ')} chart{target}"
+        kind = str(inp.get("kind") or "")
+        if kind == "stock_vs_market":
+            return f"Drew a chart of {str(inp.get('symbol') or '?').upper()} vs the market"
+        if kind == "portfolio_vs_market":
+            return "Drew a chart of your portfolio vs the market"
+        if kind == "attribution":
+            return "Drew an attribution chart (market, sector, stock-specific)"
+        return f"Drew a {kind.replace('_', ' ') or 'chart'} chart"
     return f"Called {name}"
 
 

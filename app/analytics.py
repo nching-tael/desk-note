@@ -345,9 +345,8 @@ class Analytics:
 
         by_sector = (df.groupby("sector")["sector_move"].sum()
                      .sort_values(key=lambda s: -s.abs()))
-        sector_note = ""
-        if len(by_sector) and abs(by_sector.iloc[0]) >= 1:
-            sector_note = f" (mostly {by_sector.index[0]}: {fmt_usd(by_sector.iloc[0])})"
+        top_sectors = [(k, v) for k, v in by_sector.head(2).items() if abs(v) >= 1]
+        sector_note = f" ({'; '.join(f'{k} {fmt_usd(v)}' for k, v in top_sectors)})" if top_sectors else ""
         headline = (f"Of your {fmt_usd(total)} over the {w.label}, {fmt_usd(mkt)} was the market, "
                     f"{fmt_usd(sec)} was sector moves{sector_note}, and {fmt_usd(spec)} was your "
                     f"stock picks (stock-specific moves).")

@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desk Note</title>
+<meta name="description" content="Your portfolio's morning note, on demand.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2324466b'/%3E%3Cpath d='M9 22V10h6.5a6 6 0 0 1 0 12z' fill='none' stroke='%23f6f4ef' stroke-width='2.4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f4ef;
+  --surface: #fbfaf7;
+  --raised: #ffffff;
+  --ink: #1b1f24;
+  --ink-2: #474d55;
+  --muted: #6b717a;
+  --rule: #e1ddd3;
+  --rule-strong: #cbc6ba;
+  --accent: #24466b;
+  --accent-ink: #f6f4ef;
+  --accent-soft: #e5ebf2;
+  --up: #17734a;
+  --down: #b3261e;
+  --series-1: #2a78d6;
+  --series-2: #eda100;
+  --series-3: #4a3aa7;
+  --bench: #8a8f97;
+  --grid: #ebe8e1;
+  --focus: #2a78d6;
+  --serif: "Newsreader", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121417; --surface: #171a1e; --raised: #1c2025;
+    --ink: #e9e6df; --ink-2: #c3c0b8; --muted: #959ba3;
+    --rule: #2a2f35; --rule-strong: #3a4048;
+    --accent: #9dbbe0; --accent-ink: #121417; --accent-soft: #1d2836;
+    --up: #4cc38a; --down: #f2777a;
+    --series-1: #3987e5; --series-2: #c98500; --series-3: #9085e9;
+    --bench: #7d838b; --grid: #23272d; --focus: #79a8e8;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121417; --surface: #171a1e; --raised: #1c2025;
+  --ink: #e9e6df; --ink-2: #c3c0b8; --muted: #959ba3;
+  --rule: #2a2f35; --rule-strong: #3a4048;
+  --accent: #9dbbe0; --accent-ink: #121417; --accent-soft: #1d2836;
+  --up: #4cc38a; --down: #f2777a;
+  --series-1: #3987e5; --series-2: #c98500; --series-3: #9085e9;
+  --bench: #7d838b; --grid: #23272d; --focus: #79a8e8;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.num, .big, dd, table td.n { font-variant-numeric: tabular-nums lining-nums; }
+.wrap { max-width: 46rem; margin: 0 auto; padding: 0 16px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+a { color: var(--accent); }
+button { font: inherit; color: inherit; }
+
+/* Masthead */
+.masthead { padding: 28px 0 0; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font: 600 1.5rem/1.1 var(--serif); letter-spacing: -0.01em; }
+.brand p { margin: 0; color: var(--muted); font: italic 400 1rem/1.3 var(--serif); }
+.meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.8125rem; }
+.badge { border: 1px solid var(--rule-strong); border-radius: 999px; padding: 1px 8px; font-size: 0.75rem; color: var(--ink-2); }
+.icon-btn { background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; cursor: pointer; color: var(--muted); line-height: 0; }
+.icon-btn:hover { color: var(--ink); border-color: var(--rule); }
+
+/* Summary strip */
+.strip { margin-top: 20px; padding: 20px 0 18px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.strip-top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 40px; }
+.label { display: block; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.big { display: block; font: 500 2.75rem/1.05 var(--serif); letter-spacing: -0.02em; margin-top: 4px; }
+.changes { display: flex; flex-wrap: wrap; gap: 8px 32px; margin: 0; }
+.changes div { min-width: 7rem; }
+.changes dd { margin: 4px 0 0; font-weight: 500; font-size: 1.0625rem; }
+.changes dd .p { font-weight: 400; color: inherit; opacity: 0.85; margin-left: 4px; font-size: 0.9375rem; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--ink-2); }
+.mini { margin: 16px 0 0; }
+.mini-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.mini-head .t { font-size: 0.8125rem; color: var(--ink-2); }
+.mini .canvas-box { position: relative; height: 128px; margin-top: 6px; }
+.notice { margin: 10px 0 0; font-size: 0.8125rem; color: var(--muted); }
+.skeleton { color: var(--muted); }
+
+/* Thread */
+main { padding: 8px 0 24px; min-height: 40vh; }
+.empty { padding: 28px 0 8px; }
+.empty h2 { margin: 0 0 4px; font: 500 1.375rem/1.3 var(--serif); }
+.empty p { margin: 0 0 18px; color: var(--ink-2); max-width: 36rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--rule-strong); background: var(--surface); border-radius: 999px;
+  padding: 7px 14px; cursor: pointer; font-size: 0.9375rem; color: var(--ink); text-align: left;
+  transition: border-color .15s, background-color .15s;
+}
+.chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.turn { padding: 22px 0; border-bottom: 1px solid var(--rule); }
+.turn:last-child { border-bottom: 0; }
+.q { margin: 0; font-weight: 500; color: var(--ink-2); display: flex; gap: 10px; }
+.q::before { content: "Q"; font: 600 0.75rem/1.9 var(--sans); color: var(--muted); letter-spacing: .05em; }
+.a { margin-top: 12px; font: 400 1.125rem/1.6 var(--serif); }
+.a p { margin: 0 0 0.75em; }
+.a p:first-child { font-size: 1.1875rem; }
+.a ul, .a ol { margin: 0 0 0.75em; padding-left: 1.25em; }
+.a li { margin: 0.3em 0; }
+.a li::marker { color: var(--muted); }
+.a strong { font-weight: 600; }
+.a code { font: 0.85em var(--mono); background: var(--accent-soft); padding: 1px 4px; border-radius: 3px; }
+.a table { border-collapse: collapse; font: 0.875rem var(--sans); margin: 0.5em 0 1em; }
+.a th, .a td { border-bottom: 1px solid var(--rule); padding: 4px 10px 4px 0; text-align: left; }
+.a > :last-child { margin-bottom: 0; }
+
+.working { margin-top: 12px; color: var(--muted); display: flex; align-items: center; gap: 10px; font-size: 0.9375rem; }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .25; animation: pulse 1.2s infinite ease-in-out; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .dots i { animation: none; opacity: .6; } .chip { transition: none; } }
+
+.error { margin-top: 12px; border-left: 3px solid var(--down); padding: 8px 12px; background: var(--surface); font-size: 0.9375rem; }
+.error strong { display: block; font-weight: 600; }
+
+/* Charts */
+.chart { margin: 18px 0 0; padding: 14px 14px 10px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; }
+.chart h3 { margin: 0; font: 500 0.9375rem/1.35 var(--sans); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 0.8125rem; color: var(--ink-2); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.sw.line { width: 16px; height: 0; border-top: 2px solid; border-radius: 0; }
+.sw.dash { border-top-style: dashed; }
+.chart .canvas-box { position: relative; margin-top: 10px; }
+.chart .fallback { color: var(--muted); font-size: 0.875rem; margin: 8px 0 0; }
+details.data { margin-top: 6px; font-size: 0.8125rem; }
+details.data summary { cursor: pointer; color: var(--muted); padding: 4px 0; width: fit-content; }
+.table-scroll { overflow-x: auto; }
+details.data table { border-collapse: collapse; margin-top: 6px; min-width: 100%; }
+details.data th, details.data td { padding: 3px 12px 3px 0; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+details.data td.n, details.data th.n { text-align: right; }
+
+/* Trace */
+details.trace { margin-top: 16px; font-size: 0.875rem; }
+details.trace summary { cursor: pointer; color: var(--ink-2); font-weight: 500; padding: 4px 0; width: fit-content; list-style: none; display: flex; align-items: center; gap: 6px; }
+details.trace summary::-webkit-details-marker { display: none; }
+details.trace summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin-right: 2px; }
+details.trace[open] summary::before { transform: rotate(45deg); }
+details.trace summary .count { color: var(--muted); font-weight: 400; }
+.steps { list-style: none; margin: 8px 0 0; padding: 0 0 0 12px; border-left: 1px solid var(--rule-strong); }
+.steps li { padding: 6px 0 6px 12px; position: relative; }
+.steps li::before { content: ""; position: absolute; left: -16.5px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--bg); border: 1.5px solid var(--accent); }
+.steps li.err::before { border-color: var(--down); }
+.steps .s { color: var(--ink); }
+.steps .d { color: var(--ink-2); margin-top: 2px; }
+.steps code { display: block; margin-top: 3px; font: 0.75rem/1.5 var(--mono); color: var(--muted); word-break: break-word; }
+
+/* Composer */
+.dock { position: sticky; bottom: 0; background: linear-gradient(to bottom, transparent, var(--bg) 18px); padding: 18px 0 14px; }
+.composer { display: flex; gap: 8px; align-items: flex-end; background: var(--raised); border: 1px solid var(--rule-strong); border-radius: 10px; padding: 6px 6px 6px 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.composer:focus-within { border-color: var(--accent); }
+.composer textarea { flex: 1; border: 0; background: transparent; resize: none; font: 1rem/1.5 var(--sans); color: var(--ink); padding: 7px 0; max-height: 9rem; min-height: 1.5em; }
+.composer textarea:focus { outline: none; }
+.composer textarea::placeholder { color: var(--muted); }
+.send { border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 7px; padding: 8px 16px; font-weight: 500; cursor: pointer; }
+.send:disabled { opacity: .45; cursor: default; }
+.foot { margin: 8px 2px 0; font-size: 0.75rem; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.linklike { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: inherit; }
+
+@media (max-width: 560px) {
+  .big { font-size: 2.25rem; }
+  .masthead { padding-top: 18px; }
+  .brand p { display: none; }
+  .changes { gap: 8px 22px; }
+  .changes div { min-width: 0; }
+  .a { font-size: 1.0625rem; }
+  .a p:first-child { font-size: 1.125rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <h1>Desk Note</h1>
+      <p>Your portfolio's morning note, on demand.</p>
+    </div>
+    <div class="meta">
+      <span id="asof" class="num"></span>
+      <span id="mockBadge" class="badge" hidden title="Synthetic prices and news, for demos">Demo data</span>
+      <button id="themeBtn" class="icon-btn" type="button" aria-label="Theme: automatic" title="Theme">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="strip" aria-label="Portfolio summary">
+    <div class="strip-top">
+      <div>
+        <span class="label">Portfolio value</span>
+        <span id="total" class="big skeleton">—</span>
+      </div>
+      <dl class="changes">
+        <div><dt class="label">Today</dt><dd id="day">—</dd></div>
+        <div><dt class="label">This week</dt><dd id="week">—</dd></div>
+        <div><dt class="label">Unrealised P/L</dt><dd id="pl">—</dd></div>
+      </dl>
+    </div>
+    <figure class="mini" id="mini" hidden>
+      <div class="mini-head">
+        <figcaption class="t" id="miniTitle"></figcaption>
+        <ul class="legend" id="miniLegend"></ul>
+      </div>
+      <div class="canvas-box"><canvas id="miniCanvas" role="img"></canvas></div>
+    </figure>
+    <p class="notice" id="notice" hidden></p>
+  </section>
+
+  <main id="thread" aria-live="polite" aria-busy="false">
+    <div class="empty" id="empty">
+      <h2>Ask about your portfolio</h2>
+      <p>Answers are built from real calculations on your holdings, and every one shows how it was worked out.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+  </main>
+
+  <div class="dock">
+    <form class="composer" id="composer">
+      <label for="input" class="sr-only">Ask a question about your portfolio</label>
+      <textarea id="input" rows="1" placeholder="Ask anything, e.g. why did I lose money this week?" autocomplete="off"></textarea>
+      <button class="send" id="send" type="submit">Ask</button>
+    </form>
+    <div class="foot">
+      <span>Information, not financial advice.</span>
+      <button type="button" class="linklike" id="clearBtn" hidden>New conversation</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+  "use strict";
+
+  const SUGGESTIONS = [
+    "Why did I lose money this week?",
+    "What's my biggest risk?",
+    "Does today's news break my NVDA thesis?",
+    "What earnings are coming up?",
+    "How am I doing versus the market this year?",
+    "What happened to AMD today?",
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const thread = $("thread"), input = $("input"), send = $("send");
+  const history = [];          // [{role, content}] plain text, sent to the API
+  const charts = [];           // [{canvas, spec, instance}] for theme re-render
+  let busy = false;
+
+  // ---------- formatting ----------
+  const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+  const MINUS = "−";
+  function usd(v, signed = false) {
+    if (v == null || isNaN(v)) return "—";
+    const s = "$" + nf.format(Math.abs(v));
+    if (v < 0) return MINUS + s;
+    return signed && v > 0 ? "+" + s : s;
+  }
+  function pct(v, signed = true) {
+    if (v == null || isNaN(v)) return "";
+    const s = Math.abs(v).toFixed(1) + "%";
+    return v < 0 ? MINUS + s : (signed && v > 0 ? "+" : "") + s;
+  }
+  const tone = (v) => (v > 0 ? "up" : v < 0 ? "down" : "flat");
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) n.append(k);
+    return n;
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso + "T12:00:00");
+    return isNaN(d) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  // ---------- markdown (graceful) ----------
+  function renderMarkdown(text) {
+    if (window.marked && window.DOMPurify) {
+      try { return window.DOMPurify.sanitize(window.marked.parse(text, { gfm: true, breaks: false })); }
+      catch (e) { /* fall through */ }
+    }
+    return text.split(/\n{2,}/).map((p) => "<p>" + esc(p).replace(/\n/g, "<br>") + "</p>").join("");
+  }
+
+  // ---------- theme ----------
+  const THEMES = ["auto", "light", "dark"];
+  function getTheme() { try { return localStorage.getItem("desknote-theme") || "auto"; } catch { return "auto"; } }
+  function applyTheme(t) {
+    if (t === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+    $("themeBtn").setAttribute("aria-label", "Theme: " + (t === "auto" ? "automatic" : t) + ". Click to change.");
+    rerenderCharts();
+  }
+  $("themeBtn").addEventListener("click", () => {
+    const next = THEMES[(THEMES.indexOf(getTheme()) + 1) % THEMES.length];
+    try { localStorage.setItem("desknote-theme", next); } catch {}
+    applyTheme(next);
+  });
+  const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  if (mq && mq.addEventListener) mq.addEventListener("change", () => rerenderCharts());
+
+  // ---------- charts ----------
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function seriesColor(role, i) {
+    const map = { primary: "--series-1", benchmark: "--bench", market: "--series-1", sector: "--series-2", specific: "--series-3" };
+    return cssVar(map[role] || ["--series-1", "--series-2", "--series-3"][i % 3]);
+  }
+  function fmtValue(spec, v, signed) {
+    if (v == null) return "—";
+    return spec.unit === "%" ? pct(v) : usd(v, signed);
+  }
+  function legendFor(spec) {
+    return el("ul", { class: "legend" }, ...spec.series.map((s, i) => {
+      const sw = el("span", { class: spec.type === "line" ? "sw line" + (s.role === "benchmark" ? " dash" : "") : "sw", "aria-hidden": "true" });
+      if (spec.type === "line") sw.style.borderTopColor = seriesColor(s.role, i); else sw.style.background = seriesColor(s.role, i);
+      sw.dataset.role = s.role || ""; sw.dataset.i = i; sw.dataset.kind = spec.type;
+      return el("li", {}, sw, document.createTextNode(s.name));
+    }));
+  }
+  function paintLegend(ul) {
+    ul.querySelectorAll(".sw").forEach((sw) => {
+      const c = seriesColor(sw.dataset.role, +sw.dataset.i);
+      if (sw.dataset.kind === "line") sw.style.borderTopColor = c; else sw.style.background = c;
+    });
+  }
+  function chartConfig(spec, compact) {
+    const ink2 = cssVar("--ink-2"), grid = cssVar("--grid"), surface = cssVar("--surface"), muted = cssVar("--muted");
+    const font = { family: cssVar("--sans") || "sans-serif", size: 12 };
+    const horizontal = spec.type === "bar";
+    const shortDate = (iso) => { const d = new Date(iso + "T12:00:00"); return isNaN(d) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+    const valueTick = (v) => spec.unit === "%" ? pct(v) : (Math.abs(v) >= 10000 ? (v < 0 ? MINUS : "") + "$" + nf.format(Math.abs(v) / 1000) + "k" : usd(v));
+    const datasets = spec.series.map((s, i) => {
+      const color = seriesColor(s.role, i);
+      if (spec.type === "line") {
+        return {
+          label: s.name, data: s.data, borderColor: color, backgroundColor: color,
+          borderWidth: 2, borderDash: s.role === "benchmark" ? [5, 4] : [], pointRadius: 0,
+          pointHoverRadius: 4, pointHoverBorderWidth: 2, pointHoverBorderColor: surface, tension: 0.15, spanGaps: true,
+        };
+      }
+      return {
+        label: s.name, data: s.data, backgroundColor: color, borderColor: surface, borderWidth: 1.5,
+        borderRadius: 3, borderSkipped: false, barThickness: compact ? 12 : 16, maxBarThickness: 18,
+      };
+    });
+    const valueAxis = {
+      grid: { color: grid, drawTicks: false }, border: { display: false },
+      ticks: { color: muted, font, callback: valueTick, maxTicksLimit: compact ? 4 : 6, padding: 6 },
+      stacked: !!spec.stacked,
+    };
+    const catAxis = {
+      grid: { display: false }, border: { color: grid },
+      ticks: horizontal
+        ? { color: ink2, font }
+        : { color: muted, font, maxRotation: 0, autoSkip: true, maxTicksLimit: compact ? 4 : 6, callback(v) { return shortDate(this.getLabelForValue(v)); } },
+      stacked: !!spec.stacked,
+    };
+    return {
+      type: spec.type === "line" ? "line" : "bar",
+      data: { labels: spec.labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        indexAxis: horizontal ? "y" : "x",
+        interaction: { mode: horizontal ? "nearest" : "index", axis: horizontal ? "y" : "x", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: cssVar("--raised"), titleColor: cssVar("--ink"), bodyColor: ink2,
+            borderColor: cssVar("--rule-strong"), borderWidth: 1, padding: 10, boxPadding: 4,
+            titleFont: { ...font, weight: "600" }, bodyFont: font, usePointStyle: true,
+            mode: horizontal ? "index" : "index",
+            callbacks: {
+              title: (items) => horizontal ? items[0].label : fmtDate(items[0].label),
+              label: (ctx) => " " + ctx.dataset.label + ": " + fmtValue(spec, ctx.raw, spec.type === "bar"),
+              footer: (items) => {
+                if (!(horizontal && spec.stacked)) return "";
+                const total = items.reduce((a, it) => a + (it.raw || 0), 0);
+                return "Total: " + usd(total, true);
+              },
+            },
+            footerColor: cssVar("--ink"), footerFont: { ...font, weight: "600" },
+          },
+        },
+        scales: horizontal ? { x: valueAxis, y: catAxis } : { x: catAxis, y: valueAxis },
+      },
+    };
+  }
+  function drawChart(canvas, spec, compact) {
+    if (!window.Chart) return null;
+    try { return new window.Chart(canvas, chartConfig(spec, compact)); } catch (e) { return null; }
+  }
+  function rerenderCharts() {
+    if (!window.Chart) return;
+    for (const c of charts) {
+      if (c.instance) c.instance.destroy();
+      c.instance = drawChart(c.canvas, c.spec, c.compact);
+      if (c.legend) paintLegend(c.legend);
+    }
+  }
+  function dataTable(spec) {
+    const head = el("tr", {}, el("th", { text: spec.type === "bar" ? "Holding" : "Date" }),
+      ...spec.series.map((s) => el("th", { class: "n", text: s.name })));
+    const rows = spec.labels.map((label, i) => el("tr", {},
+      el("td", { text: spec.type === "bar" ? label : fmtDate(label) }),
+      ...spec.series.map((s) => el("td", { class: "n", text: fmtValue(spec, s.data[i], spec.type === "bar") }))));
+    return el("details", { class: "data" }, el("summary", { text: "Show data" }),
+      el("div", { class: "table-scroll" }, el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows))));
+  }
+  function chartFigure(spec) {
+    const legend = legendFor(spec);
+    const height = spec.type === "bar" ? Math.max(160, spec.labels.length * 30 + 40) : 220;
+    const canvas = el("canvas", { role: "img", "aria-label": spec.title + ". Data available in the table below." });
+    const box = el("div", { class: "canvas-box" }, canvas);
+    box.style.height = height + "px";
+    const fig = el("figure", { class: "chart" }, el("h3", { text: spec.title }), legend, box, dataTable(spec));
+    requestAnimationFrame(() => {
+      const instance = drawChart(canvas, spec, false);
+      if (!instance) { box.replaceWith(el("p", { class: "fallback", text: "Chart unavailable (the charting library didn't load). The figures are in the table below." })); return; }
+      charts.push({ canvas, spec, instance, legend, compact: false });
+    });
+    return fig;
+  }
+
+  // ---------- overview ----------
+  function setChange(id, ch) {
+    const node = $(id);
+    if (!ch || ch.dollars == null) { node.textContent = "—"; return; }
+    node.className = tone(ch.dollars);
+    node.innerHTML = esc(usd(ch.dollars, true)) + '<span class="p">' + esc(pct(ch.pct)) + "</span>";
+  }
+  async function loadOverview() {
+    try {
+      const r = await fetch("/api/overview");
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Couldn't load the portfolio.");
+      $("total").textContent = usd(data.total_value);
+      $("total").classList.remove("skeleton");
+      setChange("day", data.day_change);
+      setChange("week", data.week_change);
+      setChange("pl", data.unrealised_pl);
+      $("asof").textContent = "As of " + fmtDate(data.as_of) + " close";
+      $("mockBadge").hidden = !data.mock;
+      const notes = [];
+      if (data.warnings && data.warnings.length) notes.push(data.warnings.join(" "));
+      if (!data.chat_enabled) notes.push("Chat is off: add ANTHROPIC_API_KEY to .env and restart to start asking questions.");
+      if (notes.length) { $("notice").textContent = notes.join(" "); $("notice").hidden = false; }
+      if (data.chart && window.Chart) {
+        const spec = data.chart;
+        $("miniTitle").textContent = "Last month vs the S&P 500";
+        const legend = $("miniLegend");
+        legend.replaceWith(legendFor(spec));
+        const newLegend = document.querySelector("#mini .legend");
+        newLegend.id = "miniLegend";
+        $("mini").hidden = false;
+        const canvas = $("miniCanvas");
+        canvas.setAttribute("aria-label", spec.title);
+        const instance = drawChart(canvas, spec, true);
+        if (instance) charts.push({ canvas, spec, instance, legend: newLegend, compact: true });
+        else $("mini").hidden = true;
+      }
+    } catch (e) {
+      $("total").textContent = "—";
+      $("notice").textContent = e.message || "Couldn't load the portfolio.";
+      $("notice").hidden = false;
+    }
+  }
+
+  // ---------- chat ----------
+  function argString(input) {
+    const parts = Object.entries(input || {}).map(([k, v]) => k + ": " + JSON.stringify(v));
+    return "(" + parts.join(", ") + ")";
+  }
+  function traceBlock(trace) {
+    if (!trace || !trace.length) return null;
+    const items = trace.map((t) => el("li", { class: t.ok ? "" : "err" },
+      el("div", { class: "s", text: t.summary }),
+      t.detail ? el("div", { class: "d num", text: t.detail }) : null,
+      el("code", { text: t.tool + argString(t.input) })));
+    const n = trace.length;
+    return el("details", { class: "trace" },
+      el("summary", {}, document.createTextNode("How I got this"), el("span", { class: "count", text: "· " + n + " tool call" + (n === 1 ? "" : "s") })),
+      el("ol", { class: "steps" }, ...items));
+  }
+  function setBusy(b) {
+    busy = b;
+    send.disabled = b;
+    thread.setAttribute("aria-busy", String(b));
+  }
+  function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 144) + "px"; }
+
+  async function ask(question) {
+    question = question.trim();
+    if (!question || busy) return;
+    $("empty")?.remove();
+    $("clearBtn").hidden = false;
+    history.push({ role: "user", content: question });
+    const turn = el("article", { class: "turn" }, el("p", { class: "q", text: question }));
+    const working = el("div", { class: "working", role: "status" },
+      el("span", { class: "dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")),
+      document.createTextNode("Running the numbers…"));
+    turn.append(working);
+    thread.append(turn);
+    turn.scrollIntoView({ behavior: "smooth", block: "start" });
+    setBusy(true);
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+      });
+      let data = {};
+      try { data = await r.json(); } catch {}
+      if (!r.ok) throw Object.assign(new Error(data.error || "Something went wrong (" + r.status + ")."), { code: data.code });
+      working.remove();
+      const answer = el("div", { class: "a" });
+      answer.innerHTML = renderMarkdown(data.answer || "");
+      turn.append(answer);
+      for (const spec of data.charts || []) turn.append(chartFigure(spec));
+      const tb = traceBlock(data.trace);
+      if (tb) turn.append(tb);
+      history.push({ role: "assistant", content: data.answer || "" });
+    } catch (e) {
+      working.remove();
+      history.pop(); // keep history valid; the question can be asked again
+      turn.append(el("div", { class: "error", role: "alert" },
+        el("strong", { text: e.code === "missing_api_key" ? "Chat isn't set up yet" : "Couldn't answer that" }),
+        document.createTextNode(e.message || "Network error.")));
+    } finally {
+      setBusy(false);
+      input.focus();
+    }
+  }
+
+  // ---------- wire up ----------
+  const chips = $("chips");
+  for (const s of SUGGESTIONS) {
+    const b = el("button", { class: "chip", type: "button", text: s });
+    b.addEventListener("click", () => ask(s));
+    chips.append(b);
+  }
+  $("composer").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = input.value;
+    if (!q.trim() || busy) return;
+    input.value = ""; autosize();
+    ask(q);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
+  });
+  input.addEventListener("input", autosize);
+  $("clearBtn").addEventListener("click", () => location.reload());
+
+  applyTheme(getTheme());
+  loadOverview();
+});
+</script>
+</body>
+</html>
