@@ -1,0 +1,103 @@
+# Why you own each stock, what would prove you wrong, and who to watch.
+# `watch` lists related companies whose news can confirm or challenge the thesis
+# (customers, suppliers, competitors).
+
+NVDA:
+  thesis: >
+    Nvidia is the default supplier of AI accelerators. Hyperscaler data center
+    capex keeps growing through 2027, and CUDA keeps customers locked in.
+  breaks_if:
+    - Big cloud customers cut or slow data center spending plans
+    - Custom chips (TPU, Trainium, MTIA) take meaningful share of new AI clusters
+    - Gross margin falls below 70% for two quarters
+  watch: [MSFT, META, GOOGL, AMZN, TSM]
+
+TSM:
+  thesis: >
+    TSMC manufactures nearly every leading-edge AI and smartphone chip. Advanced
+    node demand and pricing power keep margins above 50%.
+  breaks_if:
+    - Leading-edge utilisation falls or customers delay 2nm orders
+    - Geopolitical disruption to Taiwan operations
+  watch: [NVDA, AAPL, AMD, ASML]
+
+AVGO:
+  thesis: >
+    Broadcom wins the custom AI chip (ASIC) business at the hyperscalers while its
+    networking and software segments throw off steady cash.
+  breaks_if:
+    - A major custom-silicon customer moves the design in-house or to a rival
+    - VMware customers churn after price increases
+  watch: [GOOGL, META, MRVL]
+
+AMD:
+  thesis: >
+    AMD becomes the credible second source for AI accelerators and keeps taking
+    server CPU share from Intel.
+  breaks_if:
+    - MI-series accelerator revenue guidance is cut
+    - Server CPU share gains stall
+  watch: [NVDA, INTC, MSFT, TSM]
+
+MSFT:
+  thesis: >
+    Azure and Copilot turn AI spending into durable revenue growth, and the
+    Office/enterprise base funds the build-out.
+  breaks_if:
+    - Azure growth decelerates below 25% for two quarters
+    - AI capex rises while AI revenue disappoints
+  watch: [GOOGL, AMZN, ORCL]
+
+AAPL:
+  thesis: >
+    A huge installed base keeps services revenue compounding, and on-device AI
+    drives an upgrade cycle.
+  breaks_if:
+    - Services growth drops below 10%
+    - Regulators force changes to App Store economics or the Google search deal
+  watch: [GOOGL, TSM, QCOM]
+
+AMZN:
+  thesis: >
+    AWS re-accelerates on AI workloads and retail margins keep expanding from
+    advertising and logistics efficiency.
+  breaks_if:
+    - AWS growth slows while Azure and Google Cloud accelerate
+    - Retail operating margin contracts
+  watch: [MSFT, GOOGL, WMT]
+
+LLY:
+  thesis: >
+    Eli Lilly leads the obesity and diabetes drug market (Mounjaro, Zepbound)
+    and an oral GLP-1 widens the market further.
+  breaks_if:
+    - Oral GLP-1 trials disappoint on efficacy or safety
+    - Pricing pressure from Medicare negotiation or competitors
+  watch: [NVO, AMGN]
+
+JPM:
+  thesis: >
+    Best-run US bank: fortress balance sheet, strong investment banking recovery,
+    and net interest income holds up as rates ease.
+  breaks_if:
+    - Credit losses rise sharply in cards or commercial real estate
+    - Net interest income guidance cut materially
+  watch: [BAC, GS, C]
+
+XOM:
+  thesis: >
+    Low-cost Permian and Guyana production keeps cash flow strong at $70 oil,
+    funding steady dividends and buybacks. Also a hedge against oil spikes.
+  breaks_if:
+    - Oil falls below $60 for an extended period
+    - Major project delays in Guyana
+  watch: [CVX, COP]
+
+COST:
+  thesis: >
+    Membership model with renewal rates above 90% makes earnings predictable and
+    recession-resistant.
+  breaks_if:
+    - Membership renewal rate drops
+    - Comparable sales growth falls below 4%
+  watch: [WMT, TGT]
