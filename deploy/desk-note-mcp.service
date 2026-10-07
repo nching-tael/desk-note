@@ -1,0 +1,28 @@
+# systemd unit for the Desk Note MCP server. deploy/install.sh fills in
+# __USER__ and __DIR__ and installs it as /etc/systemd/system/desk-note-mcp.service.
+[Unit]
+Description=Desk Note MCP server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/.env
+# Home is read-only below, so point yfinance's own cache into the project.
+Environment=XDG_CACHE_HOME=__DIR__/.cache
+# Listens on localhost only; Tailscale Funnel (or another tunnel) publishes it.
+ExecStart=__DIR__/.venv/bin/python -m app.mcp_server --http --host 127.0.0.1 --port 8001
+Restart=on-failure
+RestartSec=5
+
+# Hardening: read-only system, writable data and cache directories only.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__DIR__/data __DIR__/.cache
+
+[Install]
+WantedBy=multi-user.target
