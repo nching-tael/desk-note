@@ -62,7 +62,7 @@ def _context_note(analytics: Analytics) -> str:
     holdings = ", ".join(analytics.symbols)
     theses = ", ".join(sorted(analytics.theses)) or "none"
     source = "synthetic demo data (mock mode)" if analytics.provider.is_mock else "Yahoo Finance"
-    return (f"\n\nContext: data as of {analytics.as_of} close, source: {source}. "
+    return (f"\n\nContext: latest prices are from {analytics.as_of} (may be intraday in live mode), source: {source}. "
             f"Holdings: {holdings}. Theses on file for: {theses}.")
 
 

@@ -476,7 +476,7 @@ window.addEventListener("DOMContentLoaded", () => {
       setChange("day", data.day_change);
       setChange("week", data.week_change);
       setChange("pl", data.unrealised_pl);
-      $("asof").textContent = "As of " + fmtDate(data.as_of) + " close";
+      $("asof").textContent = "Prices as of " + fmtDate(data.as_of);
       $("mockBadge").hidden = !data.mock;
       const notes = [];
       if (data.warnings && data.warnings.length) notes.push(data.warnings.join(" "));

@@ -205,6 +205,8 @@ class LiveProvider(DataProvider):
         import yfinance  # imported lazily so mock mode never needs it
 
         self._yf = yfinance
+        # yfinance logs every missing symbol/field at ERROR; we handle those ourselves.
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
         self.cache = _DiskCache(Path(cache_dir))
         self._tickers: dict[str, Any] = {}
 
@@ -252,7 +254,7 @@ class LiveProvider(DataProvider):
             log.warning("profile lookup failed for %s: %s", symbol, exc)
         result = {
             "symbol": symbol,
-            "name": info.get("shortName") or info.get("longName") or symbol,
+            "name": _company_name(info) or symbol,
             "sector": normalise_sector(info.get("sector")),
             "industry": info.get("industry"),
             "quote_type": info.get("quoteType"),
@@ -266,13 +268,15 @@ class LiveProvider(DataProvider):
         key = f"news:{symbol}"
         items = self.cache.get(key, self.NEWS_TTL)
         if not isinstance(items, list):
-            raw: list[dict[str, Any]] = []
-            try:
-                ticker = self._ticker(symbol)
-                raw = ticker.get_news(count=30) if hasattr(ticker, "get_news") else ticker.news
-            except Exception as exc:
-                log.warning("news lookup failed for %s: %s", symbol, exc)
-            items = [n for n in (normalise_news_item(symbol, r) for r in raw or []) if n]
+            items = []
+            # Yahoo's ticker news endpoint is often empty; fall back to search, then RSS.
+            for source in (self._news_ticker, self._news_search, self._news_rss):
+                try:
+                    items = [n for n in (normalise_news_item(symbol, r) for r in source(symbol) or []) if n]
+                except Exception as exc:
+                    log.info("news source %s failed for %s: %s", source.__name__, symbol, exc)
+                if items:
+                    break
             if items:
                 self.cache.set(key, items)
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -286,6 +290,40 @@ class LiveProvider(DataProvider):
                 seen.add(k)
                 unique.append(n)
         return unique
+
+    def _news_ticker(self, symbol: str) -> list[dict[str, Any]]:
+        ticker = self._ticker(symbol)
+        return ticker.get_news(count=30) if hasattr(ticker, "get_news") else ticker.news
+
+    def _news_search(self, symbol: str) -> list[dict[str, Any]]:
+        results = self._yf.Search(symbol, news_count=20, max_results=1).news or []
+        # Search returns market-wide stories too; keep the ones tagged with this symbol.
+        tagged = [r for r in results if symbol in (r.get("relatedTickers") or [])]
+        return tagged if tagged else [r for r in results if "relatedTickers" not in r]
+
+    @staticmethod
+    def _news_rss(symbol: str) -> list[dict[str, Any]]:
+        import urllib.parse
+        import urllib.request
+        import xml.etree.ElementTree as ET
+        from email.utils import parsedate_to_datetime
+
+        url = ("https://feeds.finance.yahoo.com/rss/2.0/headline?"
+               + urllib.parse.urlencode({"s": symbol, "region": "US", "lang": "en-US"}))
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (DeskNote)"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            root = ET.fromstring(resp.read())
+        items = []
+        for it in root.iter("item"):
+            pub = it.findtext("pubDate")
+            try:
+                ts = parsedate_to_datetime(pub).timestamp() if pub else None
+            except (TypeError, ValueError):
+                ts = None
+            items.append({"title": it.findtext("title"), "link": it.findtext("link"),
+                          "summary": it.findtext("description") or "", "providerPublishTime": ts,
+                          "publisher": "Yahoo Finance RSS"})
+        return items
 
     def earnings(self, symbol: str) -> dict[str, Any] | None:
         symbol = symbol.upper()
@@ -367,6 +405,14 @@ class LiveProvider(DataProvider):
         if call is None or put is None or spot <= 0:
             return None
         return round((call + put) / spot * 100, 1)
+
+
+def _company_name(info: dict[str, Any]) -> str | None:
+    short, long_ = info.get("shortName"), info.get("longName")
+    # Yahoo truncates shortName at 30 characters ("Taiwan Semiconductor Manufactur").
+    if short and len(short) < 30:
+        return short
+    return long_ or short
 
 
 def _parse_iso(ts: str) -> datetime:
