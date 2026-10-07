@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .data import MARKET, DataProvider, sector_etf
-from .portfolio import Holding
+from .portfolio import Holding, Trade, replay
 
 TRADING_DAYS = 252
 FIT_WINDOW = 252  # sessions of returns used to fit attribution betas
@@ -90,10 +90,13 @@ class _Window:
 
 class Analytics:
     def __init__(self, provider: DataProvider, holdings: list[Holding],
-                 theses: dict[str, dict[str, Any]] | None = None):
+                 theses: dict[str, dict[str, Any]] | None = None, trades: list[Trade] | None = None):
+        """``holdings`` are the opening positions (assumed held throughout the
+        price history); ``trades`` are later buys and sells."""
         self.provider = provider
         self.holdings = holdings
         self.theses = theses or {}
+        self.trades = sorted(trades or [], key=lambda t: (t.date, t.id or 0))
         self._lock = threading.Lock()
         self._loaded = False
         self.warnings: list[str] = []
@@ -110,7 +113,7 @@ class Analytics:
     def _load(self) -> None:
         as_of = self.provider.as_of()
         start = as_of - timedelta(days=2 * 365 + 45)
-        symbols = [h.symbol for h in self.holdings]
+        symbols = list(dict.fromkeys([h.symbol for h in self.holdings] + [t.symbol for t in self.trades]))
 
         self.profiles: dict[str, dict[str, Any]] = {}
         self.sector_of: dict[str, str | None] = {}
@@ -133,17 +136,17 @@ class Analytics:
         closes = closes.ffill(limit=5)
 
         held = []
-        for h in self.holdings:
-            series = closes.get(h.symbol)
+        for sym in symbols:
+            series = closes.get(sym)
             if series is None or series.dropna().empty:
-                self.warnings.append(f"No price data for {h.symbol}; it is excluded from the analysis.")
+                self.warnings.append(f"No price data for {sym}; it is excluded from the analysis.")
                 continue
             if series.isna().any():
                 first = series.first_valid_index()
                 if first is not None and first > closes.index[0] + pd.Timedelta(days=400):
-                    self.warnings.append(f"{h.symbol} has less than a year of price history.")
-                closes[h.symbol] = series.bfill()  # flat before listing: no fake returns
-            held.append(h)
+                    self.warnings.append(f"{sym} has less than a year of price history.")
+                closes[sym] = series.bfill()  # flat before listing: no fake returns
+            held.append(sym)
         for etf in etfs:
             if closes.get(etf) is None or closes[etf].dropna().empty:
                 self.warnings.append(f"No data for sector ETF {etf}; using market-only model for its holdings.")
@@ -155,19 +158,52 @@ class Analytics:
         if not held:
             raise RuntimeError("None of the holdings have price data.")
 
-        self.held = held
-        self.symbols = [h.symbol for h in held]
+        # Shares held at each close: opening positions throughout, then each
+        # trade from the close of its date onwards.
+        shares = pd.DataFrame(0.0, index=closes.index, columns=held)
+        for h in self.holdings:
+            if h.symbol in shares:
+                shares[h.symbol] += h.shares
+        for t in self.trades:
+            if t.symbol in shares:
+                sign = 1.0 if t.side == "buy" else -1.0
+                shares.loc[shares.index >= pd.Timestamp(t.date), t.symbol] += sign * t.shares
+        shares = shares.clip(lower=0.0)
+        book = replay(self.holdings, [t for t in self.trades if t.symbol in held])
+
+        self.all_symbols = held  # everything held at some point in the history
+        self.shares_df = shares
+        self.shares = shares.iloc[-1]
+        self.symbols = [s for s in held if self.shares[s] > 1e-9]  # held today
+        if not self.symbols:
+            raise RuntimeError("No current holdings with price data.")
         self.closes = closes
         self.returns = closes.pct_change().fillna(0.0)
-        self.shares = pd.Series({h.symbol: h.shares for h in held}, dtype=float)
-        self.cost = {h.symbol: h.cost_basis for h in held}
-        self.values = closes[self.symbols] * self.shares
+        self.cost = {s: book[s].avg_cost if s in book else None for s in held}
+        self.realised = {s: book[s].realised for s in held if s in book and book[s].realised}
+        self.values = closes[held] * shares
         self.port = self.values.sum(axis=1)
+        # Daily P/L from positions held overnight; trades don't count as gains.
+        self.pnl_df = (shares.shift(1) * closes[held].diff()).fillna(0.0)
+        self.pnl = self.pnl_df.sum(axis=1)
+        prev = self.port.shift(1)
+        self.port_ret = (self.pnl / prev).where(prev > 0, 0.0).fillna(0.0)
 
     @property
     def as_of(self) -> str:
         self.load()
         return self.closes.index[-1].date().isoformat()
+
+    def _days(self, w: _Window) -> slice:
+        """Positions of the sessions whose returns make up the window."""
+        return slice(w.start_pos + 1, w.end_pos + 1)
+
+    def _window_pnl(self, w: _Window) -> float:
+        return float(self.pnl.iloc[self._days(w)].sum())
+
+    def _window_twr(self, w: _Window) -> float:
+        """Time-weighted return: unaffected by buying or selling during the window."""
+        return float((1 + self.port_ret.iloc[self._days(w)]).prod() - 1)
 
     def name(self, symbol: str) -> str:
         return (self.profiles.get(symbol) or {}).get("name") or symbol
@@ -195,9 +231,7 @@ class Analytics:
         week = self.window("1w")
 
         def change(w: _Window) -> dict[str, Any]:
-            start = float(self.port.iloc[w.start_pos])
-            delta = total - start
-            return {"dollars": usd(delta), "pct": pct(delta / start if start else np.nan)}
+            return {"dollars": usd(self._window_pnl(w)), "pct": pct(self._window_twr(w))}
 
         positions = []
         cost_total = 0.0
@@ -222,13 +256,13 @@ class Analytics:
                 "price": round(price, 2),
                 "value": usd(value),
                 "weight_pct": pct(value / total),
-                "day_dollars": usd(value - prev * self.shares[sym]),
+                "day_dollars": usd(float(self.pnl_df[sym].iloc[-1])),
                 "day_pct": pct(price / prev - 1),
                 "unrealised_pl": usd(pl) if pl is not None else None,
                 "unrealised_pl_pct": pl_pct,
             })
         positions.sort(key=lambda p: p["value"], reverse=True)
-        return {
+        out = {
             "as_of": self.as_of,
             "data_source": self.provider.name,
             "total_value": usd(total),
@@ -242,28 +276,39 @@ class Analytics:
             "positions": positions,
             "warnings": list(self.warnings),
         }
+        if self.realised:
+            out["realised_pl"] = {"dollars": usd(sum(self.realised.values())),
+                                  "by_symbol": {s: usd(v) for s, v in self.realised.items()}}
+        return out
 
     # ----------------------------------------------------------- performance
 
+    def _held_during(self, w: _Window) -> list[str]:
+        """Symbols with a position at some close the window's returns start from."""
+        prev = self.shares_df.iloc[w.start_pos:w.end_pos]
+        return [s for s in self.all_symbols if (prev[s] > 1e-9).any()]
+
     def performance(self, period: str = "1w") -> dict[str, Any]:
         w = self.window(period)
-        v = self.values
+        days = self._days(w)
         start_total = float(self.port.iloc[w.start_pos])
         end_total = float(self.port.iloc[w.end_pos])
+        pnl_total = self._window_pnl(w)
         positions = []
-        for sym in self.symbols:
-            s, e = float(v[sym].iloc[w.start_pos]), float(v[sym].iloc[w.end_pos])
+        for sym in self._held_during(w):
+            held = self.shares_df[sym].shift(1).iloc[days] > 1e-9
+            r = self.returns[sym].iloc[days].where(held, 0.0)
             positions.append({
                 "symbol": sym,
                 "name": self.name(sym),
-                "dollars": usd(e - s),
-                "pct": pct(e / s - 1 if s else np.nan),
+                "dollars": usd(float(self.pnl_df[sym].iloc[days].sum())),
+                "pct": pct(float((1 + r).prod() - 1)),
             })
         positions.sort(key=lambda p: p["dollars"])
         spy = self.closes[MARKET]
         spy_ret = float(spy.iloc[w.end_pos] / spy.iloc[w.start_pos] - 1)
-        port_ret = end_total / start_total - 1
-        return {
+        port_ret = self._window_twr(w)
+        out = {
             "period": w.period,
             "period_label": w.label,
             "start_date": w.start.date().isoformat(),
@@ -271,7 +316,7 @@ class Analytics:
             "sessions": w.sessions,
             "start_value": usd(start_total),
             "end_value": usd(end_total),
-            "change_dollars": usd(end_total - start_total),
+            "change_dollars": usd(pnl_total),
             "change_pct": pct(port_ret),
             "market_spy_pct": pct(spy_ret),
             "vs_market_pct_points": round((port_ret - spy_ret) * 100, 1),
@@ -280,6 +325,12 @@ class Analytics:
             "worst": positions[0],
             "positions": sorted(positions, key=lambda p: p["dollars"], reverse=True),
         }
+        flows = end_total - start_total - pnl_total
+        if abs(flows) >= 1:
+            out["net_purchases_dollars"] = usd(flows)
+            out["note"] = ("change_dollars is gain/loss only; the value also changed by net_purchases_dollars "
+                           "from buying and selling. change_pct is time-weighted.")
+        return out
 
     # ----------------------------------------------------------- attribution
 
@@ -313,9 +364,10 @@ class Analytics:
         rows = []
         days = slice(w.start_pos + 1, w.end_pos + 1)
         m = r[MARKET].iloc[days].to_numpy()
-        for sym in self.symbols:
+        for sym in self._held_during(w):
             fit = self._fit_betas(sym, w)
             prev_value = self.values[sym].iloc[w.start_pos:w.end_pos].to_numpy()
+            exposure = prev_value[0] if prev_value[0] > 0 else prev_value[prev_value > 0].mean()
             ret = r[sym].iloc[days].to_numpy()
             sec = (r[fit["etf"]].iloc[days].to_numpy() - m) if fit["etf"] else np.zeros_like(m)
             market_ret = fit["beta_mkt"] * m
@@ -328,7 +380,7 @@ class Analytics:
                 "sector_move": float((sector_ret * prev_value).sum()),
                 "stock_specific": float((specific_ret * prev_value).sum()),
                 "total": float((ret * prev_value).sum()),
-                "start_value": float(prev_value[0]),
+                "start_value": float(exposure),  # first (or average) position value, for %
                 "beta_mkt": fit["beta_mkt"],
                 "beta_sector": fit["beta_sector"],
                 "sector_etf": fit["etf"],
@@ -396,7 +448,7 @@ class Analytics:
     # ------------------------------------------------------------------ risk
 
     def _weights(self) -> pd.Series:
-        v = self.values.iloc[-1]
+        v = self.values.iloc[-1][self.symbols]
         return v / v.sum()
 
     def risk(self) -> dict[str, Any]:
@@ -427,8 +479,8 @@ class Analytics:
 
         sector_w = w.groupby(pd.Series(self.sector_of)).sum().sort_values(ascending=False)
 
-        # Max drawdown of the current portfolio over the past year.
-        v = self.port.iloc[-(TRADING_DAYS + 1):]
+        # Max drawdown of the current portfolio (today's share counts) over the past year.
+        v = (self.closes[self.symbols] * self.shares[self.symbols]).sum(axis=1).iloc[-(TRADING_DAYS + 1):]
         peak = v.cummax()
         dd = v / peak - 1
         trough_date = dd.idxmin()
@@ -556,6 +608,8 @@ class Analytics:
             perf = {}
             for p in ("1w", "1m"):
                 df, w = self.attribution_frame(p)
+                if sym not in df.index:  # bought too recently to have a move
+                    continue
                 row = df.loc[sym]
                 perf[p] = {
                     "dollars": usd(row["total"]),
@@ -615,6 +669,104 @@ class Analytics:
             "note": "Implied move = options market's expected +/- move through earnings (either direction).",
         }
 
+    # --------------------------------------------------------------- journal
+
+    def _price_series(self, sym: str) -> pd.Series | None:
+        """Closes for any symbol, aligned to the analysis calendar."""
+        if sym in self.closes:
+            return self.closes[sym]
+        cache = self.__dict__.setdefault("_extra_series", {})
+        if sym not in cache:
+            try:
+                df = self.provider.prices([sym], self.closes.index[0].date())
+                s = df[sym].reindex(self.closes.index).ffill() if sym in df else None
+                cache[sym] = s if s is not None and not s.dropna().empty else None
+            except Exception:
+                cache[sym] = None
+        return cache[sym]
+
+    def trades_report(self, symbol: str | None = None) -> dict[str, Any]:
+        self.load()
+        sym = symbol.strip().upper() if symbol else None
+        trades = [t for t in self.trades if sym is None or t.symbol == sym]
+        return {
+            "trades": [{"id": t.id, "date": t.date.isoformat(), "symbol": t.symbol, "side": t.side,
+                        "shares": t.shares, "price": t.price,
+                        "value_dollars": usd(t.shares * t.price) if t.price else None} for t in trades[-50:]],
+            "count": len(trades),
+            "realised_pl_dollars": {s: usd(v) for s, v in self.realised.items() if sym is None or s == sym},
+            "note": "Opening positions from portfolio.csv aren't trades; they're assumed held throughout.",
+        }
+
+    def review_journal(self, entries: list[dict[str, Any]]) -> dict[str, Any]:
+        """How each journaled decision has worked out since: the stock's move,
+        the market's move, and the market-adjusted move (stock - beta x SPY).
+        For trades, the $ effect on the shares traded."""
+        self.load()
+        idx = self.closes.index
+        spy = self.closes[MARKET]
+        spy_r = self.returns[MARKET]
+        reviewed, buys, sells = [], [], []
+        for e in entries:
+            item = {k: e.get(k) for k in ("id", "date", "symbol", "kind")}
+            item["text"] = (e.get("text") or "")[:300]
+            if e.get("trade"):
+                item["trade"] = e["trade"]
+            sym = e.get("symbol")
+            series = self._price_series(sym) if sym else None
+            when = pd.Timestamp(e["date"])
+            pos = int(idx.searchsorted(when))
+            if series is None or when < idx[0] or pos >= len(idx) - 1:
+                item["outcome"] = None
+                item["outcome_note"] = ("No symbol." if not sym else "Too recent or outside the price "
+                                        "history to evaluate." if series is not None else f"No price data for {sym}.")
+                reviewed.append(item)
+                continue
+            p0, p1 = float(series.iloc[pos]), float(series.iloc[-1])
+            stock_ret = p1 / p0 - 1
+            spy_ret = float(spy.iloc[-1] / spy.iloc[pos] - 1)
+            r = series.pct_change().iloc[max(1, pos - TRADING_DAYS + 1):pos + 1]
+            m = spy_r.iloc[max(1, pos - TRADING_DAYS + 1):pos + 1]
+            beta = float(np.cov(r, m)[0, 1] / np.var(m, ddof=1)) if len(r) >= MIN_FIT_OBS else 1.0
+            adjusted = stock_ret - beta * spy_ret
+            outcome = {
+                "from": idx[pos].date().isoformat(),
+                "sessions": len(idx) - 1 - pos,
+                "stock_pct": pct(stock_ret),
+                "spy_pct": pct(spy_ret),
+                "beta": round(beta, 2),
+                "market_adjusted_pct": pct(adjusted),
+            }
+            trade = e.get("trade") or {}
+            if trade.get("price") and trade.get("shares"):
+                move = trade["shares"] * (p1 - trade["price"])
+                if trade.get("side") == "buy":
+                    outcome["gain_since_buy_dollars"] = usd(move)
+                else:
+                    outcome["move_since_sale_dollars"] = usd(move)
+            kind = e.get("kind")
+            if kind == "buy_reason":
+                buys.append(adjusted)
+            elif kind == "sell_reason":
+                sells.append(adjusted)
+            item["outcome"] = outcome
+            reviewed.append(item)
+        summary = {"entries": len(reviewed)}
+        if buys:
+            summary["buys_avg_market_adjusted_pct"] = pct(float(np.mean(buys)))
+            summary["buys_beating_market_adjusted"] = f"{sum(b > 0 for b in buys)} of {len(buys)}"
+        if sells:
+            summary["sells_avg_market_adjusted_pct_since"] = pct(float(np.mean(sells)))
+            summary["sells_followed_by_underperformance"] = f"{sum(x < 0 for x in sells)} of {len(sells)}"
+        return {
+            "as_of": self.as_of,
+            "summary": summary,
+            "entries": reviewed,
+            "how_to_read": ("market_adjusted_pct = stock move minus beta x S&P 500 move since the entry. "
+                            "For a buy, positive is good. For a sell, negative means the stock lagged after "
+                            "you sold (good timing); move_since_sale_dollars > 0 is gain you gave up."),
+        }
+
     # ---------------------------------------------------------------- charts
 
     def chart(self, kind: str, symbol: str | None = None, period: str | None = None) -> dict[str, Any]:
@@ -634,9 +786,13 @@ class Analytics:
 
     def chart_portfolio_vs_market(self, period: str = "1m") -> dict[str, Any]:
         w = self.window(period)
-        port = self.port.iloc[w.start_pos:w.end_pos + 1]
+        start_value = float(self.port.iloc[w.start_pos])
+        # Growth of the starting value (time-weighted), so buying and selling
+        # don't show up as gains or losses.
+        growth = (1 + self.port_ret.iloc[self._days(w)]).cumprod()
+        port = pd.concat([pd.Series([start_value]), start_value * growth])
         spy = self.closes[MARKET].iloc[w.start_pos:w.end_pos + 1]
-        scaled = spy / spy.iloc[0] * port.iloc[0]
+        scaled = spy / spy.iloc[0] * start_value
         return {
             "kind": "portfolio_vs_market",
             "type": "line",
@@ -695,14 +851,68 @@ class Analytics:
         }
 
 
-def build(mock: bool = True, portfolio_path=None, theses_path=None, provider: DataProvider | None = None) -> Analytics:
-    """Convenience constructor used by the CLI, server and agent."""
+def build(mock: bool = True, portfolio_path=None, theses_path=None, provider: DataProvider | None = None,
+          store=None) -> Analytics:
+    """Build Analytics from a Store (opening positions, trades, theses) or,
+    without one, straight from portfolio.csv and theses.yaml."""
     from .data import make_provider
     from .portfolio import DEFAULT_PORTFOLIO, DEFAULT_THESES, load_holdings, load_theses
 
     provider = provider or make_provider(mock)
+    if store is not None:
+        return Analytics(provider, store.opening(), store.theses(), store.trades())
     return Analytics(provider, load_holdings(portfolio_path or DEFAULT_PORTFOLIO),
                      load_theses(theses_path or DEFAULT_THESES))
+
+
+class AnalyticsHolder:
+    """Keeps one loaded Analytics and rebuilds it when prices go stale (live
+    mode) or after a write to the store, so a long-running server (e.g. on a
+    Raspberry Pi) always answers from current data. The provider and its disk
+    cache are reused across rebuilds."""
+
+    def __init__(self, mock: bool = False, ttl_seconds: float = 15 * 60,
+                 analytics: Analytics | None = None, store=None):
+        import time
+
+        from .data import make_provider
+
+        self._time = time.monotonic
+        self.mock = mock
+        self.ttl = ttl_seconds
+        self._lock = threading.Lock()
+        self._fixed = analytics is not None
+        if store is None and not self._fixed:
+            from .store import open_store
+
+            store = open_store(mock)
+        self.store = store
+        self._provider = analytics.provider if analytics else None
+        self._make_provider = lambda: make_provider(mock)
+        self._current = analytics
+        self._built_at = self._time()
+        self._dirty = False
+
+    def invalidate(self) -> None:
+        """Call after writing to the store."""
+        with self._lock:
+            self._dirty = True
+
+    def get(self) -> Analytics:
+        with self._lock:
+            expired = not self.mock and self._time() - self._built_at > self.ttl
+            stale = not self._fixed and self._current is not None and (self._dirty or expired)
+            if self._current is None or stale:
+                self._provider = self._provider or self._make_provider()
+                fresh = build(provider=self._provider, store=self.store)
+                try:
+                    fresh.load()
+                except Exception:
+                    if self._current is None or self._dirty:
+                        raise
+                    return self._current  # keep serving the last good data
+                self._current, self._built_at, self._dirty = fresh, self._time(), False
+            return self._current
 
 
 if __name__ == "__main__":  # python -m app.analytics [--mock] [period]
@@ -713,7 +923,7 @@ if __name__ == "__main__":  # python -m app.analytics [--mock] [period]
     ap.add_argument("period", nargs="?", default="1w")
     ap.add_argument("--mock", action="store_true")
     args = ap.parse_args()
-    a = build(mock=args.mock)
+    a = AnalyticsHolder(mock=args.mock).get()
     att = a.attribution(args.period)
     print(att["headline"], "\n")
     for h in att["holdings"]:

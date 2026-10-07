@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -94,3 +95,51 @@ def load_theses(path: str | Path = DEFAULT_THESES) -> dict[str, dict[str, Any]]:
             "watch": [str(w).strip().upper() for w in watch if str(w).strip()],
         }
     return theses
+
+
+@dataclass(frozen=True)
+class Trade:
+    """A buy or sell after the opening positions in portfolio.csv. Trades take
+    effect at the close of ``date`` (or the next session if it isn't one)."""
+    date: date
+    symbol: str
+    side: str  # "buy" | "sell"
+    shares: float
+    price: float | None = None
+    id: int | None = None
+    note: str | None = None
+
+
+@dataclass
+class Position:
+    shares: float
+    avg_cost: float | None  # average cost per share; None if unknown
+    realised: float = 0.0  # realised P/L from sells, in $
+
+
+def replay(opening: list[Holding], trades: list[Trade]) -> dict[str, Position]:
+    """Apply trades (in date order) to the opening positions using average cost.
+    Raises PortfolioError if a sell exceeds the shares held at that point."""
+    book: dict[str, Position] = {h.symbol: Position(h.shares, h.cost_basis) for h in opening}
+    for t in sorted(trades, key=lambda t: (t.date, t.id or 0)):
+        pos = book.setdefault(t.symbol, Position(0.0, None))
+        if t.side == "buy":
+            if pos.shares <= 1e-9:
+                pos.avg_cost = t.price
+            elif pos.avg_cost is not None and t.price is not None:
+                pos.avg_cost = (pos.avg_cost * pos.shares + t.price * t.shares) / (pos.shares + t.shares)
+            else:
+                pos.avg_cost = None
+            pos.shares += t.shares
+        elif t.side == "sell":
+            if t.shares > pos.shares + 1e-9:
+                raise PortfolioError(
+                    f"Can't sell {t.shares:g} {t.symbol} on {t.date}: only {pos.shares:g} held then.")
+            if pos.avg_cost is not None and t.price is not None:
+                pos.realised += (t.price - pos.avg_cost) * t.shares
+            pos.shares -= t.shares
+            if pos.shares <= 1e-9:
+                pos.shares = 0.0
+        else:
+            raise PortfolioError(f"Unknown trade side '{t.side}'")
+    return book

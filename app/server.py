@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .agent import run_agent
-from .analytics import Analytics, build
+from .analytics import Analytics, AnalyticsHolder
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).resolve().parent / "static"
@@ -55,12 +55,10 @@ def create_app(mock: bool = False, analytics: Analytics | None = None,
                client_factory: Callable[[], Any] | None = None) -> FastAPI:
     """``client_factory`` lets tests inject a fake Anthropic client."""
     app = FastAPI(title="Desk Note", docs_url=None, redoc_url=None)
-    state: dict[str, Any] = {"analytics": analytics}
+    holder = AnalyticsHolder(mock=mock, analytics=analytics)
 
     def get_analytics() -> Analytics:
-        if state["analytics"] is None:
-            state["analytics"] = build(mock=mock)
-        return state["analytics"].load()
+        return holder.get().load()
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

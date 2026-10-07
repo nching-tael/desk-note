@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from .analytics import PERIOD_LABELS, PERIODS, Analytics, AnalyticsError, fmt_usd, normalise_period
+from .analytics import PERIOD_LABELS, PERIODS, Analytics, AnalyticsError, fmt_usd, normalise_period, usd
 
 log = logging.getLogger(__name__)
 
@@ -121,7 +121,96 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-TOOL_NAMES = {t["name"] for t in TOOLS}
+# Tools that need the store: reading trade history and the journal, and writing.
+# The MCP server exposes these; the web demo is read-only and uses TOOLS only.
+MEMORY_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "get_trades",
+        "description": "Trades the user has recorded (buys and sells after their opening positions), with ids "
+                       "and realised profit/loss. Use the id with delete_trade to fix a mistake.",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "Optional: only this ticker."}}},
+    },
+    {
+        "name": "review_journal",
+        "description": (
+            "The user's decision journal (why they bought, sold or changed a thesis), with how each decision "
+            "has worked out since: the stock's move, the S&P 500's move, the market-adjusted move, and for "
+            "trades the $ gained since buying or given up since selling. Use for 'how have my decisions "
+            "worked out', 'was selling X a mistake', or before revisiting a holding."
+        ),
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "Optional: only this ticker."},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Default 20, newest first."}}},
+    },
+]
+
+WRITE_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "record_trade",
+        "description": (
+            "Record a buy or sell the user has ALREADY made, updating their holdings. Only call when the user "
+            "clearly states a completed trade; if shares are ambiguous (e.g. 'half'), work them out from "
+            "get_overview and confirm with the user first. If they say why, pass it as reason: it goes in the "
+            "decision journal. Price defaults to the latest close if not given."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string"},
+                "side": {"type": "string", "enum": ["buy", "sell"]},
+                "shares": {"type": "number", "exclusiveMinimum": 0},
+                "price": {"type": "number", "exclusiveMinimum": 0, "description": "Price per share in $."},
+                "date": {"type": "string", "description": "YYYY-MM-DD. Defaults to today."},
+                "reason": {"type": "string", "description": "Why the user made the trade, in their words."},
+            },
+            "required": ["symbol", "side", "shares"],
+        },
+    },
+    {
+        "name": "delete_trade",
+        "description": "Delete a recorded trade by id (from get_trades), e.g. to fix a mistake. Confirm with the user first.",
+        "input_schema": {"type": "object", "properties": {"trade_id": {"type": "integer"}}, "required": ["trade_id"]},
+    },
+    {
+        "name": "update_thesis",
+        "description": (
+            "Create or edit the user's thesis for a holding: the thesis text, the list of things that would "
+            "break it (replaces the list), and watch-list companies to add or remove. Only change what the "
+            "user asked to change."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string"},
+                "thesis": {"type": "string"},
+                "breaks_if": {"type": "array", "items": {"type": "string"}},
+                "watch_add": {"type": "array", "items": {"type": "string"}},
+                "watch_remove": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["symbol"],
+        },
+    },
+    {
+        "name": "add_journal_entry",
+        "description": (
+            "Save a note to the user's decision journal, e.g. why they're considering a stock or how their "
+            "view changed. (Trades with a reason are journaled automatically by record_trade.)"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"},
+                "symbol": {"type": "string"},
+                "kind": {"type": "string", "enum": ["buy_reason", "sell_reason", "thesis_change", "note"]},
+            },
+            "required": ["text"],
+        },
+    },
+]
+
+TOOL_NAMES = {t["name"] for t in TOOLS + MEMORY_TOOLS + WRITE_TOOLS}
+WRITE_TOOL_NAMES = {t["name"] for t in WRITE_TOOLS}
 
 
 @dataclass
@@ -133,6 +222,7 @@ class ToolOutcome:
     summary: str = ""
     detail: str | None = None
     chart: dict[str, Any] | None = None
+    changed: bool = False  # True after a successful write: rebuild analytics
     result: dict[str, Any] | None = field(default=None, repr=False)
 
     def trace_entry(self) -> dict[str, Any]:
@@ -172,6 +262,19 @@ def summarise(name: str, inp: dict[str, Any]) -> str:
         return f"Reviewed the {str(inp.get('symbol', '?')).upper()} thesis against recent news and price moves"
     if name == "get_upcoming_events":
         return f"Checked earnings dates in the next {inp.get('days', 30)} days"
+    if name == "get_trades":
+        return f"Looked up recorded trades{' for ' + str(inp['symbol']).upper() if inp.get('symbol') else ''}"
+    if name == "review_journal":
+        return f"Reviewed journal decisions{' on ' + str(inp['symbol']).upper() if inp.get('symbol') else ''} against what happened since"
+    if name == "record_trade":
+        return (f"Recorded a {inp.get('side', '?')} of {inp.get('shares', '?')} "
+                f"{str(inp.get('symbol', '?')).upper()}")
+    if name == "delete_trade":
+        return f"Deleted trade #{inp.get('trade_id', '?')}"
+    if name == "update_thesis":
+        return f"Updated the {str(inp.get('symbol', '?')).upper()} thesis"
+    if name == "add_journal_entry":
+        return "Saved a journal entry"
     if name == "get_chart":
         kind = str(inp.get("kind") or "")
         if kind == "stock_vs_market":
@@ -203,6 +306,65 @@ def _detail(name: str, result: dict[str, Any]) -> str | None:
     return None
 
 
+def _latest_price(analytics: Analytics, symbol: str) -> float | None:
+    series = analytics._price_series(symbol)
+    if series is None or series.dropna().empty:
+        return None
+    return float(series.dropna().iloc[-1])
+
+
+def _call_store(analytics: Analytics, store, name: str, inp: dict[str, Any]) -> dict[str, Any]:
+    from datetime import date as _date
+
+    from .portfolio import Trade, replay
+
+    if store is None:
+        raise AnalyticsError("Trades and the journal aren't available here (no database).")
+    if name == "review_journal":
+        entries = store.journal(inp.get("symbol"), int(inp.get("limit") or 20))
+        if not entries:
+            return {"entries": [], "summary": {"entries": 0},
+                    "note": "The journal is empty. Entries are added by record_trade (with a reason) or add_journal_entry."}
+        return analytics.review_journal(entries)
+    if name == "record_trade":
+        symbol = str(inp.get("symbol") or "").strip().upper()
+        price = inp.get("price")
+        latest = _latest_price(analytics, symbol) if symbol else None
+        if latest is None:
+            raise AnalyticsError(f"No price data for '{symbol}'. Check the ticker symbol.")
+        assumed = price is None
+        when = _date.fromisoformat(inp["date"]) if inp.get("date") else _date.fromisoformat(analytics.as_of)
+        trade = store.add_trade(
+            Trade(when, symbol, str(inp.get("side") or "").lower(), float(inp.get("shares") or 0),
+                  float(price) if price is not None else round(latest, 2)),
+            reason=inp.get("reason"))
+        pos = replay(store.opening(), store.trades()).get(symbol)
+        out = {
+            "recorded": {"id": trade.id, "date": trade.date.isoformat(), "symbol": symbol, "side": trade.side,
+                         "shares": trade.shares, "price": trade.price, "value_dollars": usd(trade.shares * trade.price)},
+            "position_now": {"shares": pos.shares if pos else 0.0,
+                             "avg_cost": round(pos.avg_cost, 2) if pos and pos.avg_cost else None},
+            "journaled_reason": bool(inp.get("reason")),
+        }
+        if assumed:
+            out["note"] = f"No price given; used the latest close (${trade.price:,.2f}). Tell the user."
+        if trade.side == "sell" and pos is not None:
+            out["realised_pl_total_dollars"] = usd(pos.realised)
+        return out
+    if name == "delete_trade":
+        t = store.delete_trade(int(inp.get("trade_id")))
+        return {"deleted": {"id": t.id, "date": t.date.isoformat(), "symbol": t.symbol, "side": t.side,
+                            "shares": t.shares, "price": t.price}}
+    if name == "update_thesis":
+        return {"thesis": store.update_thesis(inp.get("symbol"), inp.get("thesis"), inp.get("breaks_if"),
+                                              inp.get("watch_add"), inp.get("watch_remove"))}
+    if name == "add_journal_entry":
+        entry = store.add_journal(str(inp.get("text") or ""), inp.get("symbol"), inp.get("kind") or "note",
+                                  on=_date.fromisoformat(analytics.as_of))
+        return {"saved": entry}
+    raise AnalyticsError(f"Unknown tool '{name}'.")
+
+
 def _call(analytics: Analytics, name: str, inp: dict[str, Any]) -> dict[str, Any]:
     if name == "get_overview":
         return analytics.overview()
@@ -225,15 +387,21 @@ def _call(analytics: Analytics, name: str, inp: dict[str, Any]) -> dict[str, Any
         return analytics.events(int(inp.get("days") or 30))
     if name == "get_chart":
         return analytics.chart(str(inp.get("kind") or ""), inp.get("symbol"), inp.get("period"))
+    if name == "get_trades":
+        return analytics.trades_report(inp.get("symbol"))
     raise AnalyticsError(f"Unknown tool '{name}'. Available: {', '.join(sorted(TOOL_NAMES))}.")
 
 
-def run_tool(analytics: Analytics, name: str, inp: dict[str, Any] | None) -> ToolOutcome:
-    """Execute a tool. Always returns a ToolOutcome whose ``content`` is valid JSON."""
+def run_tool(analytics: Analytics, name: str, inp: dict[str, Any] | None, store=None) -> ToolOutcome:
+    """Execute a tool. Always returns a ToolOutcome whose ``content`` is valid JSON.
+    ``store`` enables the journal and write tools."""
     inp = dict(inp or {})
     summary = summarise(name, inp)
     try:
-        result = _call(analytics, name, inp)
+        if name in WRITE_TOOL_NAMES or name == "review_journal":
+            result = _call_store(analytics, store, name, inp)
+        else:
+            result = _call(analytics, name, inp)
     except (AnalyticsError, ValueError, TypeError, KeyError) as exc:
         msg = str(exc) or exc.__class__.__name__
         return ToolOutcome(name, inp, json.dumps({"error": msg}), True, f"{summary} (failed: {msg})")
@@ -251,4 +419,4 @@ def run_tool(analytics: Analytics, name: str, inp: dict[str, Any] | None) -> Too
     except (KeyError, TypeError, ValueError):
         detail = None
     return ToolOutcome(name, inp, json.dumps(result, default=str, ensure_ascii=False), False, summary,
-                       detail=detail, result=result)
+                       detail=detail, result=result, changed=name in WRITE_TOOL_NAMES)

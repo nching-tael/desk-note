@@ -195,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from dotenv import load_dotenv
 
-    from .analytics import build
+    from .analytics import AnalyticsHolder
 
     load_dotenv()
     ap = argparse.ArgumentParser(description="Ask Desk Note a question from the command line.")
@@ -206,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")):
         print("Add ANTHROPIC_API_KEY to .env to start chatting.", file=sys.stderr)
         return 2
-    analytics = build(mock=args.mock)
+    analytics = AnalyticsHolder(mock=args.mock).get()
     result = run_agent([{"role": "user", "content": args.question}], analytics, model=args.model,
                        on_tool=lambda e: print(f"  · {e['summary']}", file=sys.stderr))
     print("\n" + result["answer"] + "\n")
