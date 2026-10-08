@@ -95,5 +95,19 @@ def test_fund_with_no_data_is_unclassified(provider, monkeypatch):
         ),
     )
     a = Analytics(provider, [Holding("VOO", 10, None), Holding("NVDA", 5, None)], {}).load()
-    assert a.sector_of["VOO"] == "Diversified fund"
+    assert a.sector_of["VOO"] == "Unclassified"
     assert "Unclassified" in a.exposure()["sector_exposure_pct"]
+
+
+def test_commodity_fund_uses_its_category(provider, monkeypatch):
+    gold = {
+        "category": "Commodities Focused",
+        "sector_weights": {},
+        "top_holdings": [],
+        "asset_classes": {"other": 1.0},
+    }
+    real = provider.fund
+    monkeypatch.setattr(provider, "fund", lambda s: gold if s == "VOO" else real(s))
+    a = Analytics(provider, [Holding("VOO", 10, None), Holding("NVDA", 5, None)], {}).load()
+    assert a.sector_of["VOO"] == "Commodities Focused" and a.etf_of["VOO"] is None
+    assert "Commodities Focused" in a.exposure()["sector_exposure_pct"]

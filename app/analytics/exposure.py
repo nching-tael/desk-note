@@ -21,7 +21,13 @@ def classify_fund(fund):
         sector, weight = max(sectors.items(), key=lambda item: item[1])
         if weight >= SECTOR_FUND_THRESHOLD:
             return sector, sector_etf(sector)
-    return "Diversified fund", None
+        return "Diversified fund", None
+    # no stock sectors at all: gold, bitcoin and the like
+    return non_stock_label(fund), None
+
+
+def non_stock_label(fund):
+    return fund.get("category") or "Unclassified"
 
 
 def look_through(a):
@@ -100,7 +106,7 @@ def add_fund_sectors(sectors, fund, value):
     weights = fund["sector_weights"]
     bonds = classes.get("bonds", 0.0)
     if not weights and not bonds:
-        sectors["Unclassified"] += value
+        sectors[non_stock_label(fund)] += value
         return
 
     stock_share = (classes.get("stocks") or (0.0 if bonds else 1.0)) if weights else 0.0

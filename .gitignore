@@ -6,3 +6,5 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 /data/
+/my_portfolio.csv
+/my_theses.yaml

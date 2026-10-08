@@ -323,6 +323,8 @@ def main():
     parser = argparse.ArgumentParser(description="Inspect or reseed the Desk Note database.")
     parser.add_argument("command", choices=["show", "reseed"])
     parser.add_argument("--force", action="store_true", help="needed for reseed; deletes trades and journal")
+    parser.add_argument("--portfolio", default=DEFAULT_PORTFOLIO, help="CSV to reseed from")
+    parser.add_argument("--theses", default=DEFAULT_THESES, help="YAML to reseed from")
     args = parser.parse_args()
 
     store = Store(os.getenv("DESK_NOTE_DB") or DEFAULT_DB)
@@ -333,8 +335,8 @@ def main():
                 "Run it again with --force to go ahead."
             )
             return 1
-        store.seed_from_files(force=True)
-        print(f"Reseeded {store.path} from portfolio.csv and theses.yaml.")
+        store.seed_from_files(args.portfolio, args.theses, force=True)
+        print(f"Reseeded {store.path} from {args.portfolio} and {args.theses}.")
         return 0
 
     store.seed_from_files()
