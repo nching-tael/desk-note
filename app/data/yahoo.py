@@ -20,6 +20,8 @@ from .base import DataProvider, normalise_sector
 log = logging.getLogger(__name__)
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"
+# in the project folder, wherever the process happens to be started from
+CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache"
 
 
 class DiskCache:
@@ -111,7 +113,7 @@ class LiveProvider(DataProvider):
     NEWS_TTL = 30 * 60
     EARNINGS_TTL = 6 * 3600
 
-    def __init__(self, cache_dir=".cache"):
+    def __init__(self, cache_dir=CACHE_DIR):
         import yfinance  # only needed in live mode
 
         self.yf = yfinance
