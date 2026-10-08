@@ -21,7 +21,7 @@ CALLS = [
 
 def test_every_tool_has_a_valid_schema():
     names = [t["name"] for t in TOOLS]
-    assert len(names) == len(set(names)) == 9
+    assert len(names) == len(set(names)) == 11
     for t in TOOLS:
         assert t["description"] and t["input_schema"]["type"] == "object"
         json.dumps(t)

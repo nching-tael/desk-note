@@ -172,6 +172,39 @@ def get_exposure(ctx, args):
 
 
 @tool(
+    "get_allocation",
+    """
+    The user's target allocation versus where they are now: each position's weight, target, drift
+    in percentage points, whether it's outside its band, and the dollar trade that would put it back
+    on target. Core vs satellite totals too. Pass new_money to get a plan for investing a
+    contribution that moves toward target without selling anything.""",
+    describe=lambda args: (
+        "Checked your allocation against your targets"
+        + (f" and planned how to invest ${args['new_money']:,}" if args.get("new_money") else "")
+    ),
+    properties={
+        "new_money": {"type": "number", "minimum": 0, "description": "Optional: $ about to be invested."}
+    },
+)
+def get_allocation(ctx, args):
+    return ctx.analytics.allocation(float(args.get("new_money") or 0))
+
+
+@tool(
+    "get_scorecard",
+    """
+    Satellite scorecard: for each satellite (non-core) holding over a period, its actual $ gain
+    versus what the same money would have made in the user's core over the same days, so the user
+    can see whether each bet beat simply owning more of the core. Uses the S&P 500 as the core if no
+    core is set.""",
+    describe=lambda args: f"Scored each satellite against the core for the {period_label(args, '1y')}",
+    properties={"period": PERIOD},
+)
+def get_scorecard(ctx, args):
+    return ctx.analytics.scorecard(args.get("period") or "1y")
+
+
+@tool(
     "get_news",
     """
     Recent headlines (title, publisher, time, short summary) for one or more ticker symbols.
@@ -425,6 +458,38 @@ def delete_trade(ctx, args):
 
 
 @tool(
+    "set_targets",
+    """
+    Save the user's target allocation, e.g. VOO 70% core and four satellites at 7.5%. Each target
+    has a role (core or satellite) and an optional drift band in percentage points (default 5 for
+    positions of 20% or more, 2 otherwise). With replace=true (default) the targets must add up to
+    100%; with replace=false only the listed symbols change. Only save what the user asked for.""",
+    describe=lambda args: f"Saved target allocation for {len(args.get('targets') or [])} position(s)",
+    properties={
+        "targets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "target_pct": {"type": "number", "minimum": 0, "maximum": 100},
+                    "role": {"type": "string", "enum": ["core", "satellite"]},
+                    "band_pct": {"type": "number", "minimum": 0},
+                },
+                "required": ["symbol", "target_pct"],
+            },
+        },
+        "replace": {"type": "boolean", "description": "Replace all targets (default true)."},
+    },
+    required=["targets"],
+    group="write",
+)
+def set_targets(ctx, args):
+    replace = args.get("replace", True)
+    return {"targets": require_store(ctx).set_targets(args.get("targets") or [], replace=replace)}
+
+
+@tool(
     "update_thesis",
     """
     Create or edit the user's thesis for a holding: the thesis text, the list of things that would
@@ -501,6 +566,14 @@ def headline(name, result):
         return f"Volatility {result['volatility_annual_pct']}%/yr, beta {result['beta_to_spy']}"
     if name == "get_upcoming_events":
         return f"{len(result['events'])} earnings event(s) found"
+    if name == "get_allocation" and result.get("targets_set"):
+        flagged = result["outside_band"]
+        return f"{len(flagged)} position(s) outside their band" + (
+            f": {', '.join(flagged)}" if flagged else ""
+        )
+    if name == "get_scorecard":
+        net = result["total_added_vs_core_dollars"]
+        return f"{result['satellites_beating_core']} satellites beat the core, net ${net:,}"
     if name == "get_exposure" and result["top_exposures"]:
         top = result["top_exposures"][0]
         return f"Largest underlying holding: {top['symbol']} at {top['pct']}% (${top['total_dollars']:,})"

@@ -65,6 +65,13 @@ CREATE TABLE IF NOT EXISTS journal (
     trade_id INTEGER REFERENCES trades(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS targets (
+    symbol TEXT PRIMARY KEY,
+    target_pct REAL NOT NULL CHECK (target_pct >= 0),
+    band_pct REAL NOT NULL CHECK (band_pct >= 0),
+    role TEXT NOT NULL CHECK (role IN ('core', 'satellite')),
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
@@ -109,7 +116,7 @@ class Store:
         with self.lock, self.db:
             if self.seeded and not force:
                 return False
-            for table in ("journal", "trades", "opening", "theses"):
+            for table in ("journal", "trades", "opening", "theses", "targets"):
                 self.db.execute(f"DELETE FROM {table}")
             self.db.executemany(
                 "INSERT INTO opening VALUES (?, ?, ?)", [(h.symbol, h.shares, h.cost_basis) for h in holdings]
@@ -192,6 +199,13 @@ class Store:
             entries.append(entry)
         return entries
 
+    def targets(self):
+        rows = self.db.execute("SELECT * FROM targets ORDER BY target_pct DESC")
+        return {
+            r["symbol"]: {"target_pct": r["target_pct"], "band_pct": r["band_pct"], "role": r["role"]}
+            for r in rows
+        }
+
     # --- writes
 
     def add_trade(self, trade, reason=None):
@@ -256,6 +270,41 @@ class Store:
         except PortfolioError as e:
             raise StoreError(str(e)) from e
 
+    def set_targets(self, targets, replace=True):
+        """targets: [{symbol, target_pct, role?, band_pct?}]. With replace, the
+        new set must add up to 100%. Otherwise listed symbols are updated and the
+        rest kept, as long as the total doesn't go over 100%."""
+        if not targets:
+            raise StoreError("Give at least one target.")
+        cleaned = {}
+        for t in targets:
+            symbol = clean_symbol(t.get("symbol"))
+            target = float(t.get("target_pct", -1))
+            if not 0 <= target <= 100:
+                raise StoreError(f"{symbol}: target_pct must be between 0 and 100.")
+            role = t.get("role") or ("core" if target >= 40 else "satellite")
+            if role not in ("core", "satellite"):
+                raise StoreError(f"{symbol}: role must be 'core' or 'satellite'.")
+            band = t.get("band_pct")
+            band = float(band) if band is not None else default_band(target)
+            cleaned[symbol] = {"target_pct": target, "band_pct": band, "role": role}
+
+        with self.lock, self.db:
+            combined = cleaned if replace else {**self.targets(), **cleaned}
+            total = sum(t["target_pct"] for t in combined.values())
+            if replace and abs(total - 100) > 0.5:
+                raise StoreError(f"Targets add up to {total:g}%, not 100%.")
+            if total > 100.5:
+                raise StoreError(f"Targets would add up to {total:g}%, over 100%.")
+            if replace:
+                self.db.execute("DELETE FROM targets")
+            for symbol, t in cleaned.items():
+                self.db.execute(
+                    "INSERT OR REPLACE INTO targets VALUES (?, ?, ?, ?, ?)",
+                    (symbol, t["target_pct"], t["band_pct"], t["role"], now()),
+                )
+        return self.targets()
+
     def update_thesis(self, symbol, thesis=None, breaks_if=None, watch_add=None, watch_remove=None):
         symbol = clean_symbol(symbol)
         with self.lock, self.db:
@@ -304,6 +353,12 @@ class Store:
             (on.isoformat(), symbol, kind, text.strip()[:4000], trade_id, now()),
         )
         return cursor.lastrowid
+
+
+def default_band(target_pct):
+    """How far a position can drift before it's flagged: 5 points for big
+    positions, 2 for small ones."""
+    return 5.0 if target_pct >= 20 else 2.0
 
 
 def open_store(mock, path=None):

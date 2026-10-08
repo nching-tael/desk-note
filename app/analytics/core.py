@@ -12,7 +12,7 @@ import pandas as pd
 
 from ..data import MARKET, sector_etf
 from ..portfolio import replay
-from . import charts, exposure, journal, research, risk
+from . import allocation, charts, exposure, journal, research, risk, scorecard
 from .exposure import classify_fund
 from .periods import (
     PERIOD_SESSIONS,
@@ -28,13 +28,15 @@ MIN_FIT_DAYS = 40  # below this, assume beta 1 to the market
 
 
 class Analytics:
-    def __init__(self, provider, holdings, theses=None, trades=None):
+    def __init__(self, provider, holdings, theses=None, trades=None, targets=None):
         """holdings are the opening positions, assumed held throughout the
-        price history; trades are buys and sells after that."""
+        price history; trades are buys and sells after that; targets are the
+        user's target allocation ({symbol: {target_pct, band_pct, role}})."""
         self.provider = provider
         self.holdings = holdings
         self.theses = theses or {}
         self.trades = sorted(trades or [], key=lambda t: (t.date, t.id or 0))
+        self.targets = targets or {}
         self.warnings = []
         self.extra_prices = {}
         self._loaded = False
@@ -444,6 +446,12 @@ class Analytics:
 
     def exposure(self):
         return exposure.look_through(self)
+
+    def allocation(self, new_money=0.0):
+        return allocation.allocation(self, new_money)
+
+    def scorecard(self, period="1y"):
+        return scorecard.scorecard(self, period)
 
     def trades_report(self, symbol=None):
         return journal.trades_report(self, symbol)

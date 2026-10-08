@@ -71,7 +71,7 @@ def test_collects_trace_and_charts(analytics):
 
     # Request shape: tools + system + fallbacks for this model.
     first = client.calls[0]
-    assert len(first["tools"]) == 9
+    assert len(first["tools"]) == 11
     assert "Never state a figure" in first["system"]
     assert first["fallbacks"] == "default"
     assert "tool_choice" not in first

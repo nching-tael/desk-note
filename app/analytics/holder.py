@@ -15,7 +15,7 @@ def build(mock=True, portfolio_path=None, theses_path=None, provider=None, store
     from portfolio.csv and theses.yaml."""
     provider = provider or make_provider(mock)
     if store is not None:
-        return Analytics(provider, store.opening(), store.theses(), store.trades())
+        return Analytics(provider, store.opening(), store.theses(), store.trades(), store.targets())
     return Analytics(
         provider,
         load_holdings(portfolio_path or DEFAULT_PORTFOLIO),
