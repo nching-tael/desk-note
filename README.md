@@ -23,6 +23,10 @@ The screenshot uses mock mode (synthetic prices and news). The figures are real 
 
 **What your ETFs really hold.** Funds are opened up into the stocks and sectors underneath, so a portfolio of VOO, QQQ and SMH shows up as, say, 8.7% Nvidia spread across three funds and 51% technology overall. Sector funds like SMH or XLE are measured against their sector; broad funds like VOO against the market.
 
+**Whether you're still on target.** Save a target allocation (say 70% core, four satellites at 7.5%) and Desk Note shows how far each position has drifted, the trades that would rebalance it, and how to invest new money so you move back toward target without selling.
+
+**Whether your bets are worth it.** The satellite scorecard compares each satellite with what the same money would have made in your core over the same days: "SMH made $594; the same dollars in VOO would have made $153, so the bet added $441."
+
 **Hidden concentration.** Holdings that move together are grouped, so eleven stocks can turn out to be "42% of your money in four chip stocks with an average correlation of 0.73". Each holding's share of overall risk is shown next to its weight.
 
 **Whether a thesis still holds.** You write down why you own something, what would prove you wrong, and which related companies to watch. Thesis checks pull news for the stock and its watch list, so a customer cutting spending shows up even when the headline never mentions your stock.
@@ -86,8 +90,9 @@ Web UI ── agent.py ─┘                   └── store.py (SQLite)
 ```
 
 - `app/data/`: market data providers. `yahoo.py` wraps yfinance with a disk cache and falls back through three news sources; `mock.py` generates a deterministic market with a scripted week.
-- `app/analytics/`: all the calculations. `core.py` loads prices and works out daily gains, returns and attribution; `exposure.py` classifies funds and looks through them; `risk.py`, `research.py`, `journal.py` and `charts.py` cover the rest.
-- `app/tools.py`: the 15 tools Claude can call, each defined next to its handler.
+- `app/analytics/`: all the calculations. `core.py` loads prices and works out daily gains, returns and attribution; `exposure.py` classifies funds and looks through them; `allocation.py` and `scorecard.py` handle targets and satellites; `risk.py`, `research.py`, `journal.py` and `charts.py` cover the rest.
+- `app/tools.py`: the 18 tools Claude can call, each defined next to its handler.
+- `app/grounding.py`: checks that every number in an answer appears in a tool result.
 - `app/store.py`: trades, theses and the journal in SQLite.
 - `app/mcp_server.py`, `app/agent.py`, `app/server.py`: the MCP server, the web app's agent loop and its FastAPI server.
 
@@ -96,9 +101,13 @@ Attribution fits `return = a + b_mkt × SPY + b_sec × (sector ETF − SPY)` for
 The formulas, a worked example you can check by hand, and how each calculation is tested are in [docs/methodology.md](docs/methodology.md).
 
 ```bash
-python -m pytest -q    # 115 tests, all offline
+python -m pytest -q    # 139 tests, all offline
 ruff check .
 ```
+
+### Checking the model doesn't do maths
+
+The rule is enforced in two ways. Every web-app answer goes through `app/grounding.py`, which pulls out each number and looks for it in the tool results (rounding like "about $14k" is allowed; adding two tool figures together isn't). Untraceable numbers are shown under the answer. And `python -m evals.run` asks the real model 20 standard questions and scores each answer on four things: it answered, it called the right tool, every number traces to a tool, and it didn't tell you to buy or sell. That run uses the API, so it costs a little each time.
 
 ## Limitations
 

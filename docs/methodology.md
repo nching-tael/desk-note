@@ -65,6 +65,20 @@ exposure(stock) = direct value + Σ over funds (fund value × stock's weight in 
 ```
 Sector exposure splits each fund by its full sector weights (bonds and cash separately). Only the top holdings are published, so the rest of each fund isn't broken down by stock.
 
+### Target allocation
+```
+drift (points)      = current weight − target weight
+to rebalance ($)    = target weight × total value − current value     (+ buy, − sell)
+```
+A position is flagged when its drift is bigger than its band (default 5 points for targets of 20% or more, 2 otherwise). New money is split by each position's gap to target after the money arrives, so it never requires selling; a whole-share plan buys one share at a time of whichever position is furthest below target and still affordable.
+
+### Satellite scorecard
+```
+same money in core = Σ satellite value at close(t−1) × core return(t)     over the days held
+added vs core      = satellite's actual gain − same money in core
+```
+The core return is the value-weighted return of the holdings marked core (the S&P 500 if none are). Following the actual value day by day means buying or selling during the period is handled.
+
 ### Risk (one year of daily returns, current weights w)
 | Measure | Formula |
 |---|---|
@@ -110,6 +124,9 @@ market-adjusted move = stock return − β × SPY return     (since the decision
 | Stress test | β = 1.5, $10,000 position gives −$1,500 | `test_stress_test_by_hand` |
 | Implied move | Call mid 3.1 + put mid 2.9 on spot 100.4 gives 6.0% | `test_implied_move_by_hand` |
 | Journal review | A stock that moves exactly with the market shows 0% market-adjusted | `test_journal_market_adjusted_move_by_hand` |
+| Drift and rebalance | 80/20 against 70/30 on $10,000: sell $1,000 of A, buy $1,000 of B | `test_drift_and_rebalance_by_hand` (tests/test_allocation.py) |
+| New money | $1,000 goes entirely to the position that's short; $5,000 lands exactly on target | `test_new_money_goes_to_the_gap_first`, `test_enough_new_money_lands_exactly_on_target` |
+| Satellite scorecard | Gain $200 vs $0 in the core; with a mid-period buy, $400 vs −$100 | `test_scorecard_by_hand`, `test_scorecard_follows_buys_during_the_period` |
 | Look-through | NVDA = direct value + 8.1% of VOO + 19.3% of SMH, checked by hand; sector exposure sums to 100% | `test_look_through_nvidia_by_hand` (tests/test_funds.py) |
 
 **Do the tests catch real bugs?** Re-introducing a bug I found during this review (dropping zero-return days from the beta fit) makes `test_fit_matches_independent_ols_including_flat_days` fail. Counting purchases as gains makes the two worked-example tests fail.

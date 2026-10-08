@@ -77,6 +77,23 @@ def test_collects_trace_and_charts(analytics):
     assert "tool_choice" not in first
 
 
+def test_answers_are_checked_for_untraceable_numbers(analytics):
+    def run(answer):
+        client = FakeClient(
+            [
+                response("tool_use", tool_use("t1", "get_attribution", {"period": "1w"})),
+                response("end_turn", text(answer)),
+            ]
+        )
+        return run_agent([{"role": "user", "content": "Why did I lose money?"}], analytics, client=client)
+
+    headline = analytics.attribution("1w")["headline"]
+    good = run(headline)
+    assert good["grounding"]["ungrounded"] == [] and good["grounding"]["numbers_checked"] >= 4
+    bad = run("You lost $9,999 this week.")
+    assert bad["grounding"]["ungrounded"] == ["$9,999"]
+
+
 def test_tool_errors_are_returned_to_model_not_raised(analytics):
     client = FakeClient(
         [

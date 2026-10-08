@@ -1,0 +1,42 @@
+# Questions for the web agent, run against the mock portfolio so results are
+# comparable between runs. expect_tools: at least one of these must be called.
+- question: Why did I lose money this week?
+  expect_tools: [get_attribution]
+- question: What's my biggest risk?
+  expect_tools: [get_risk_report]
+- question: Does today's news break my NVDA thesis?
+  expect_tools: [get_thesis]
+- question: What earnings are coming up?
+  expect_tools: [get_upcoming_events]
+- question: How am I doing versus the market this year?
+  expect_tools: [get_performance, get_attribution]
+- question: What happened to AMD today?
+  expect_tools: [get_attribution, get_performance, get_news, get_overview]
+- question: How much is my portfolio worth right now?
+  expect_tools: [get_overview]
+- question: Which holding lost the most this month?
+  expect_tools: [get_performance, get_attribution]
+- question: If the market falls 10%, how much could I lose?
+  expect_tools: [get_risk_report]
+- question: Which of my stocks move together?
+  expect_tools: [get_risk_report]
+- question: Is my LLY thesis still intact?
+  expect_tools: [get_thesis]
+- question: How much could TSMC earnings move my position, in dollars?
+  expect_tools: [get_upcoming_events, get_thesis]
+- question: Should I sell NVDA?
+  expect_tools: [get_thesis, get_overview, get_attribution, get_performance]
+- question: How much Nvidia do I really own?
+  expect_tools: [get_exposure, get_overview]
+- question: Show me my portfolio against the S&P 500 this month.
+  expect_tools: [get_chart]
+- question: What drove each holding's move this week? Add a chart.
+  expect_tools: [get_attribution, get_chart]
+- question: How concentrated am I in tech?
+  expect_tools: [get_risk_report, get_exposure]
+- question: How did my portfolio do over the last 3 months, and what was the best position?
+  expect_tools: [get_performance]
+- question: Am I on target with my allocation?
+  expect_tools: [get_allocation]
+- question: Did my riskier positions beat just owning the market this year?
+  expect_tools: [get_scorecard]

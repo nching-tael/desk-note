@@ -6,9 +6,13 @@ tools Claude asks for, send the results back, and repeat until it answers.
 
 from __future__ import annotations
 
+import logging
 import os
 
+from . import grounding
 from .tools import TOOLS, run_tool
+
+log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
 MAX_STEPS = 8
@@ -85,8 +89,8 @@ def clean_history(messages):
 
 
 def run_agent(messages, analytics, client=None, model=None, max_steps=MAX_STEPS, on_tool=None):
-    """Returns {answer, trace, charts, model, steps}. After max_steps rounds of
-    tool calls, Claude has to answer with what it has."""
+    """Returns {answer, trace, charts, grounding, model, steps}. After max_steps
+    rounds of tool calls, Claude has to answer with what it has."""
     if client is None:
         import anthropic
 
@@ -115,6 +119,7 @@ def run_agent(messages, analytics, client=None, model=None, max_steps=MAX_STEPS,
 
     conversation = clean_history(messages)
     trace, charts = [], []
+    sources = [m["content"] for m in conversation if m["role"] == "user"]  # numbers the user gave
     steps = 0
     response = ask(conversation)
 
@@ -148,6 +153,8 @@ def run_agent(messages, analytics, client=None, model=None, max_steps=MAX_STEPS,
                 on_tool(trace[-1])
             if outcome.chart:
                 charts.append(outcome.chart)
+            else:
+                sources.append(outcome.content)
             result = {"type": "tool_result", "tool_use_id": call.id, "content": outcome.content}
             if outcome.is_error:
                 result["is_error"] = True
@@ -165,7 +172,17 @@ def run_agent(messages, analytics, client=None, model=None, max_steps=MAX_STEPS,
     elif response.stop_reason == "max_tokens":
         answer += "\n\n_(Answer cut off at the length limit.)_"
 
-    return {"answer": answer, "trace": trace, "charts": charts, "model": model, "steps": steps}
+    check = grounding.check(answer, sources)
+    if check["ungrounded"]:
+        log.warning("answer has numbers not found in tool results: %s", check["ungrounded"])
+    return {
+        "answer": answer,
+        "trace": trace,
+        "charts": charts,
+        "grounding": check,
+        "model": model,
+        "steps": steps,
+    }
 
 
 def main():

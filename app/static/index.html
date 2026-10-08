@@ -161,6 +161,8 @@ details.data th, details.data td { padding: 3px 12px 3px 0; border-bottom: 1px s
 details.data td.n, details.data th.n { text-align: right; }
 
 /* Trace */
+.unverified { margin-top: 12px; font-size: 0.875rem; color: var(--ink-2); border: 1px solid var(--rule-strong); border-radius: 8px; padding: 8px 12px; }
+.unverified strong { font-weight: 600; color: var(--ink); }
 details.trace { margin-top: 16px; font-size: 0.875rem; }
 details.trace summary { cursor: pointer; color: var(--ink-2); font-weight: 500; padding: 4px 0; width: fit-content; list-style: none; display: flex; align-items: center; gap: 6px; }
 details.trace summary::-webkit-details-marker { display: none; }
@@ -553,6 +555,12 @@ window.addEventListener("DOMContentLoaded", () => {
       answer.innerHTML = renderMarkdown(data.answer || "");
       turn.append(answer);
       for (const spec of data.charts || []) turn.append(chartFigure(spec));
+      const unverified = (data.grounding && data.grounding.ungrounded) || [];
+      if (unverified.length) {
+        turn.append(el("p", { class: "unverified" },
+          el("strong", { text: "Check these numbers: " }),
+          document.createTextNode(unverified.join(", ") + " didn't come from any tool result, so Desk Note can't vouch for them.")));
+      }
       const tb = traceBlock(data.trace);
       if (tb) turn.append(tb);
       history.push({ role: "assistant", content: data.answer || "" });
