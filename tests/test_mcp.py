@@ -35,7 +35,7 @@ def test_lists_tools_prompts_and_instructions(holder):
     instructions, tools, prompts = run(go)
     assert "must come from a Desk Note tool" in instructions
     by_name = {t.name: t for t in tools}
-    assert len(by_name) == 14
+    assert len(by_name) == 15
     assert by_name["get_attribution"].annotations.read_only_hint is True
     assert by_name["record_trade"].annotations.read_only_hint is False
     assert by_name["delete_trade"].annotations.destructive_hint is True

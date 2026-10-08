@@ -48,6 +48,23 @@ $ component = component × position value at close(t−1)
 ```
 The three components add up to the dollar P/L by construction. That makes the "sums to total" test a bookkeeping check only. The real validation is whether the betas are right (see below).
 
+### ETFs and funds
+Each fund is classified from its published sector weights:
+
+| Fund | Treated as | Factor |
+|---|---|---|
+| At least 50% in one sector (SMH, XLE, QQQ) | that sector | the sector's SPDR ETF |
+| Mostly bonds (BND) | Bonds | market only |
+| Anything else (VOO, VXUS, SCHD) | Diversified fund | market only |
+
+For a fund, the stock-specific part means how the fund did beyond what the market (and its sector) explain, e.g. international stocks lagging the US.
+
+Look-through splits each fund's value across its top holdings by weight and adds direct holdings on top:
+```
+exposure(stock) = direct value + Σ over funds (fund value × stock's weight in the fund)
+```
+Sector exposure splits each fund by its full sector weights (bonds and cash separately). Only the top holdings are published, so the rest of each fund isn't broken down by stock.
+
 ### Risk (one year of daily returns, current weights w)
 | Measure | Formula |
 |---|---|
@@ -93,6 +110,7 @@ market-adjusted move = stock return − β × SPY return     (since the decision
 | Stress test | β = 1.5, $10,000 position gives −$1,500 | `test_stress_test_by_hand` |
 | Implied move | Call mid 3.1 + put mid 2.9 on spot 100.4 gives 6.0% | `test_implied_move_by_hand` |
 | Journal review | A stock that moves exactly with the market shows 0% market-adjusted | `test_journal_market_adjusted_move_by_hand` |
+| Look-through | NVDA = direct value + 8.1% of VOO + 19.3% of SMH, checked by hand; sector exposure sums to 100% | `test_look_through_nvidia_by_hand` (tests/test_funds.py) |
 
 **Do the tests catch real bugs?** Re-introducing a bug I found during this review (dropping zero-return days from the beta fit) makes `test_fit_matches_independent_ols_including_flat_days` fail. Counting purchases as gains makes the two worked-example tests fail.
 

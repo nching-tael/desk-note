@@ -12,7 +12,8 @@ import pandas as pd
 
 from ..data import MARKET, sector_etf
 from ..portfolio import replay
-from . import charts, journal, research, risk
+from . import charts, exposure, journal, research, risk
+from .exposure import classify_fund
 from .periods import (
     PERIOD_SESSIONS,
     TRADING_DAYS,
@@ -51,14 +52,21 @@ class Analytics:
         symbols = list(dict.fromkeys([h.symbol for h in self.holdings] + [t.symbol for t in self.trades]))
 
         self.profiles = {s: self.provider.profile(s) for s in symbols}
+        self.funds = {}
         self.sector_of = {}
         self.etf_of = {}
         for symbol, profile in self.profiles.items():
-            sector = profile.get("sector")
-            if not sector and profile.get("quote_type") == "ETF":
-                sector = "ETF"
-            self.sector_of[symbol] = sector or "Unknown"
-            self.etf_of[symbol] = sector_etf(sector)
+            fund = None
+            if profile.get("quote_type") in ("ETF", "MUTUALFUND"):
+                fund = self.provider.fund(symbol)
+            if fund:
+                self.funds[symbol] = fund
+                sector, etf = classify_fund(fund)
+            else:
+                sector = profile.get("sector") or ("ETF" if profile.get("quote_type") == "ETF" else "Unknown")
+                etf = sector_etf(sector)
+            self.sector_of[symbol] = sector
+            self.etf_of[symbol] = etf
         etfs = sorted({e for e in self.etf_of.values() if e})
 
         start = today - timedelta(days=2 * 365 + 45)
@@ -366,7 +374,7 @@ class Analytics:
         headline = (
             f"Of your {fmt_usd(total)} over the {w.label}, {fmt_usd(market)} was the market, "
             f"{fmt_usd(sector)} was sector moves{sector_detail}, and {fmt_usd(stock)} was "
-            f"your stock picks (stock-specific moves)."
+            f"your picks (moves specific to each holding)."
         )
 
         holdings = [
@@ -433,6 +441,9 @@ class Analytics:
 
     def events(self, days=30):
         return research.events(self, days)
+
+    def exposure(self):
+        return exposure.look_through(self)
 
     def trades_report(self, symbol=None):
         return journal.trades_report(self, symbol)

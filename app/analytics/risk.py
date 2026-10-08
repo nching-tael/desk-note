@@ -6,6 +6,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..data import MARKET
+from .exposure import look_through
 from .periods import TRADING_DAYS, pct, usd
 
 PAIR_THRESHOLD = 0.7  # correlated pairs worth listing
@@ -31,7 +32,6 @@ def report(a):
         return float(r.cov(spy) / spy_var)
 
     largest = weights.sort_values(ascending=False)
-    sector_weights = weights.groupby(a.sector_of).sum().sort_values(ascending=False)
     corr = returns.corr()
 
     return {
@@ -52,7 +52,8 @@ def report(a):
             ],
             key=lambda p: -p["risk_share_pct"],
         ),
-        "sector_weights_pct": {name: pct(v) for name, v in sector_weights.items()},
+        # looked through funds, so VOO counts as its sectors rather than "Diversified fund"
+        "sector_weights_pct": look_through(a)["sector_exposure_pct"],
         "correlated_pairs_above_0_7": correlated_pairs(corr)[:10],
         "correlated_groups": correlated_groups(a, corr, weights, total_value),
         "max_drawdown_1y": max_drawdown(a),

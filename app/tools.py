@@ -159,6 +159,19 @@ def get_risk_report(ctx, args):
 
 
 @tool(
+    "get_exposure",
+    """
+    Look-through view of what the user really owns: their ETFs and funds opened up into the
+    underlying stocks (direct holdings plus each fund's share), stocks held through more than one
+    fund, and true sector exposure across everything. Use for ETF portfolios and for questions like
+    'how much Nvidia do I really own' or 'am I more concentrated than I think'.""",
+    describe=lambda args: "Looked through your funds to the stocks and sectors underneath",
+)
+def get_exposure(ctx, args):
+    return ctx.analytics.exposure()
+
+
+@tool(
     "get_news",
     """
     Recent headlines (title, publisher, time, short summary) for one or more ticker symbols.
@@ -488,6 +501,9 @@ def headline(name, result):
         return f"Volatility {result['volatility_annual_pct']}%/yr, beta {result['beta_to_spy']}"
     if name == "get_upcoming_events":
         return f"{len(result['events'])} earnings event(s) found"
+    if name == "get_exposure" and result["top_exposures"]:
+        top = result["top_exposures"][0]
+        return f"Largest underlying holding: {top['symbol']} at {top['pct']}% (${top['total_dollars']:,})"
     if name == "get_news":
         return f"{sum(len(items) for items in result['news'].values())} headline(s)"
     return None

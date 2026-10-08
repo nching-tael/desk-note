@@ -19,7 +19,9 @@ The screenshot uses mock mode (synthetic prices and news). The figures are real 
 
 **Why the portfolio moved.** Each holding's change is split into what the market did, what its sector did, and what's specific to the stock, in dollars:
 
-> Of your -$6,348 over the last 5 trading days, -$4,136 was the market, -$753 was sector moves (Technology -$1,198; Energy +$324), and -$1,459 was your stock picks.
+> Of your -$6,348 over the last 5 trading days, -$4,136 was the market, -$753 was sector moves (Technology -$1,198; Energy +$324), and -$1,459 was your picks.
+
+**What your ETFs really hold.** Funds are opened up into the stocks and sectors underneath, so a portfolio of VOO, QQQ and SMH shows up as, say, 8.7% Nvidia spread across three funds and 51% technology overall. Sector funds like SMH or XLE are measured against their sector; broad funds like VOO against the market.
 
 **Hidden concentration.** Holdings that move together are grouped, so eleven stocks can turn out to be "42% of your money in four chip stocks with an average correlation of 0.73". Each holding's share of overall risk is shown next to its weight.
 
@@ -84,8 +86,8 @@ Web UI ── agent.py ─┘                   └── store.py (SQLite)
 ```
 
 - `app/data/`: market data providers. `yahoo.py` wraps yfinance with a disk cache and falls back through three news sources; `mock.py` generates a deterministic market with a scripted week.
-- `app/analytics/`: all the calculations. `core.py` loads prices and works out daily gains, returns and attribution; `risk.py`, `research.py`, `journal.py` and `charts.py` cover the rest.
-- `app/tools.py`: the 14 tools Claude can call, each defined next to its handler.
+- `app/analytics/`: all the calculations. `core.py` loads prices and works out daily gains, returns and attribution; `exposure.py` classifies funds and looks through them; `risk.py`, `research.py`, `journal.py` and `charts.py` cover the rest.
+- `app/tools.py`: the 15 tools Claude can call, each defined next to its handler.
 - `app/store.py`: trades, theses and the journal in SQLite.
 - `app/mcp_server.py`, `app/agent.py`, `app/server.py`: the MCP server, the web app's agent loop and its FastAPI server.
 
@@ -94,7 +96,7 @@ Attribution fits `return = a + b_mkt × SPY + b_sec × (sector ETF − SPY)` for
 The formulas, a worked example you can check by hand, and how each calculation is tested are in [docs/methodology.md](docs/methodology.md).
 
 ```bash
-python -m pytest -q    # 105 tests, all offline
+python -m pytest -q    # 115 tests, all offline
 ruff check .
 ```
 
@@ -103,6 +105,7 @@ ruff check .
 - Yahoo Finance via yfinance is unofficial. Prices lag, sectors and options data are sometimes missing, and the news feed is thin, which is why the MCP setup leans on Claude's own web search.
 - Trades take effect at the close of their date. Dividends count as reinvested and cash isn't tracked.
 - Cost basis is average cost, so realised gains won't match broker tax forms (usually FIFO).
+- Look-through uses each fund's published top holdings (usually ten), so the rest of a fund isn't broken down by stock; sector exposure uses the full sector weights. Foreign listings and share classes (2330.TW vs TSM, GOOG vs GOOGL) count separately.
 - Betas are estimates. There's no industry factor, so a move across the whole chip sector counts as stock-specific for each chip stock, and a sector ETF includes the stock itself.
 - The remote MCP endpoint is protected by a secret token in its URL. Fine for one person; it would need OAuth before sharing.
 - It's information, not investment advice, and it never connects to a brokerage.

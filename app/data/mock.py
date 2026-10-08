@@ -122,6 +122,98 @@ EARNINGS = {
 
 PUBLISHER = "Demo Wire (synthetic)"
 
+# Funds: a few ETFs with sector weights and top holdings, for look-through.
+# Their prices are built from their holdings (see generate), XLE's already exists.
+FUNDS = {
+    "VOO": {
+        "name": "Vanguard S&P 500 ETF",
+        "price": 615,
+        "category": "Large Blend",
+        "sectors": {
+            "Technology": 0.38,
+            "Financial Services": 0.12,
+            "Communication Services": 0.10,
+            "Consumer Cyclical": 0.10,
+            "Healthcare": 0.09,
+            "Industrials": 0.08,
+            "Consumer Defensive": 0.05,
+            "Energy": 0.03,
+            "Utilities": 0.02,
+            "Real Estate": 0.02,
+            "Basic Materials": 0.01,
+        },
+        "holdings": {
+            "NVDA": 0.081,
+            "AAPL": 0.070,
+            "MSFT": 0.057,
+            "AMZN": 0.038,
+            "GOOGL": 0.030,
+            "META": 0.029,
+            "AVGO": 0.026,
+            "JPM": 0.014,
+            "LLY": 0.012,
+            "XOM": 0.009,
+        },
+    },
+    "QQQ": {
+        "name": "Invesco QQQ Trust",
+        "price": 602,
+        "category": "Large Growth",
+        "sectors": {
+            "Technology": 0.60,
+            "Communication Services": 0.13,
+            "Consumer Cyclical": 0.10,
+            "Consumer Defensive": 0.06,
+            "Healthcare": 0.05,
+            "Industrials": 0.04,
+            "Utilities": 0.02,
+        },
+        "holdings": {
+            "NVDA": 0.083,
+            "AAPL": 0.074,
+            "MSFT": 0.058,
+            "AMZN": 0.052,
+            "AVGO": 0.050,
+            "META": 0.045,
+            "GOOGL": 0.044,
+            "AMD": 0.042,
+            "COST": 0.025,
+            "QCOM": 0.015,
+        },
+    },
+    "SMH": {
+        "name": "VanEck Semiconductor ETF",
+        "price": 331,
+        "category": "Technology",
+        "sectors": {"Technology": 1.0},
+        "holdings": {
+            "NVDA": 0.193,
+            "TSM": 0.093,
+            "AMD": 0.055,
+            "AVGO": 0.053,
+            "ASML": 0.045,
+            "QCOM": 0.040,
+            "INTC": 0.035,
+            "MRVL": 0.030,
+        },
+    },
+    "XLE": {
+        "name": "Energy Select Sector SPDR Fund",
+        "price": 90,
+        "category": "Equity Energy",
+        "sectors": {"Energy": 1.0},
+        "holdings": {"XOM": 0.24, "CVX": 0.18, "COP": 0.067},
+    },
+    "BND": {
+        "name": "Vanguard Total Bond Market ETF",
+        "price": 74,
+        "category": "Intermediate Core Bond",
+        "sectors": {},
+        "holdings": {},
+        "bonds": True,
+    },
+}
+
 
 def prices_from_returns(returns, last_price):
     """Price path with the given daily returns that ends at last_price.
@@ -179,7 +271,26 @@ class MockProvider(DataProvider):
             r[week] -= s.drift  # keep the scripted week exactly as written
             returns[symbol] = r
 
+        # Funds get their own random stream so adding one never changes the
+        # prices above. Holdings move the fund; the rest follows a rough proxy.
+        fund_rng = np.random.default_rng(self.seed + 1)
+        rest_of_fund = {
+            "VOO": spy,
+            "QQQ": 1.1 * spy + 0.6 * sector_excess["XLK"],
+            "SMH": 1.4 * spy + sector_excess["XLK"] + semis,
+        }
+        for symbol, fund in FUNDS.items():
+            if symbol in returns:
+                continue
+            if fund.get("bonds"):
+                returns[symbol] = fund_rng.normal(0.00015, 0.003, n)
+                continue
+            held = sum(fund["holdings"].values())
+            r = sum(w * returns[s] for s, w in fund["holdings"].items()) + (1 - held) * rest_of_fund[symbol]
+            returns[symbol] = r + fund_rng.normal(0, 0.0005, n)
+
         last_prices = {sym: s.price for sym, s in STOCKS.items()}
+        last_prices.update({sym: fund["price"] for sym, fund in FUNDS.items()})
         last_prices.update({etf: params[0] for etf, params in ETFS.items()})
         closes = {sym: prices_from_returns(r, last_prices[sym]) for sym, r in returns.items()}
         return pd.DataFrame(closes, index=self.sessions)
@@ -213,8 +324,35 @@ class MockProvider(DataProvider):
                 "industry": None,
                 "quote_type": "EQUITY",
             }
+        if symbol in FUNDS:
+            return {
+                "symbol": symbol,
+                "name": FUNDS[symbol]["name"],
+                "sector": None,
+                "industry": None,
+                "quote_type": "ETF",
+            }
         quote_type = "ETF" if symbol in ETFS else None
         return {"symbol": symbol, "name": symbol, "sector": None, "industry": None, "quote_type": quote_type}
+
+    def fund(self, symbol):
+        fund = FUNDS.get(symbol.upper())
+        if fund is None:
+            return None
+        holdings = [
+            {"symbol": s, "name": STOCKS[s].name if s in STOCKS else s, "weight": w}
+            for s, w in fund["holdings"].items()
+        ]
+        if fund.get("bonds"):
+            classes = {"stocks": 0.0, "bonds": 0.986, "cash": 0.014, "other": 0.0}
+        else:
+            classes = {"stocks": 0.995, "bonds": 0.0, "cash": 0.005, "other": 0.0}
+        return {
+            "category": fund["category"],
+            "sector_weights": dict(fund["sectors"]),
+            "top_holdings": holdings,
+            "asset_classes": classes,
+        }
 
     def news(self, symbol, days=14):
         symbol = symbol.upper()

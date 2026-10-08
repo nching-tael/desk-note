@@ -35,6 +35,22 @@ SECTOR_ALIASES = {
 }
 
 
+# Yahoo's keys for fund sector weightings
+FUND_SECTOR_KEYS = {
+    "technology": "Technology",
+    "healthcare": "Healthcare",
+    "financial_services": "Financial Services",
+    "energy": "Energy",
+    "consumer_cyclical": "Consumer Cyclical",
+    "consumer_defensive": "Consumer Defensive",
+    "industrials": "Industrials",
+    "utilities": "Utilities",
+    "realestate": "Real Estate",
+    "basic_materials": "Basic Materials",
+    "communication_services": "Communication Services",
+}
+
+
 def normalise_sector(sector):
     if not sector or not str(sector).strip():
         return None
@@ -71,3 +87,9 @@ class DataProvider:
     def earnings(self, symbol: str) -> dict[str, Any] | None:
         """symbol, date, implied_move_pct, implied_move_source."""
         raise NotImplementedError
+
+    def fund(self, symbol: str) -> dict[str, Any] | None:
+        """For ETFs and mutual funds: category, sector_weights ({sector: fraction}),
+        top_holdings ([{symbol, name, weight}]) and asset_classes ({stocks, bonds,
+        cash, other}). None for anything that isn't a fund."""
+        return None

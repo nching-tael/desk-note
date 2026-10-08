@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .base import DataProvider, normalise_sector
+from .base import FUND_SECTOR_KEYS, DataProvider, normalise_sector
 
 log = logging.getLogger(__name__)
 
@@ -239,6 +239,20 @@ class LiveProvider(DataProvider):
             )
         return items
 
+    def fund(self, symbol):
+        symbol = symbol.upper()
+        cached = self.cache.get(f"fund:{symbol}", self.PROFILE_TTL)
+        if cached is not None:
+            return cached or None  # {} means it isn't a fund
+
+        try:
+            result = fund_details(self.ticker(symbol))
+        except Exception as e:
+            log.info("no fund data for %s: %s", symbol, e)
+            return None  # don't cache failures, they may be temporary
+        self.cache.set(f"fund:{symbol}", result or {})
+        return result
+
     def earnings(self, symbol):
         symbol = symbol.upper()
         cached = self.cache.get(f"earnings:{symbol}", self.EARNINGS_TTL)
@@ -262,6 +276,38 @@ class LiveProvider(DataProvider):
             }
         self.cache.set(f"earnings:{symbol}", result or {})
         return result
+
+
+def fund_details(ticker):
+    data = ticker.funds_data
+    sectors = {
+        FUND_SECTOR_KEYS[key]: round(float(weight), 4)
+        for key, weight in (data.sector_weightings or {}).items()
+        if key in FUND_SECTOR_KEYS and weight > 0
+    }
+    holdings = data.top_holdings
+    top = []
+    if holdings is not None and not holdings.empty:
+        top = [
+            {"symbol": symbol, "name": row["Name"], "weight": round(float(row["Holding Percent"]), 4)}
+            for symbol, row in holdings.iterrows()
+        ]
+    classes = data.asset_classes or {}
+    asset_classes = {
+        "stocks": classes.get("stockPosition", 0.0),
+        "bonds": classes.get("bondPosition", 0.0),
+        "cash": classes.get("cashPosition", 0.0),
+        "other": classes.get("otherPosition", 0.0) + classes.get("preferredPosition", 0.0),
+    }
+    if not sectors and not top and not any(asset_classes.values()):
+        return None
+    category = (ticker.get_info() or {}).get("category")
+    return {
+        "category": category,
+        "sector_weights": sectors,
+        "top_holdings": top,
+        "asset_classes": asset_classes,
+    }
 
 
 def next_earnings_date(ticker):
