@@ -79,15 +79,23 @@ added vs core      = satellite's actual gain − same money in core
 ```
 The core return is the value-weighted return of the holdings marked core (the S&P 500 if none are). Following the actual value day by day means buying or selling during the period is handled.
 
-### Risk (one year of daily returns, current weights w)
-| Measure | Formula |
+### Risk (today's holdings at today's weights)
+| Measure | How it's calculated |
 |---|---|
-| Volatility | √(wᵀ Σ w), with Σ = sample covariance × 252 |
-| Beta to SPY | cov(r_portfolio, r_SPY) / var(r_SPY) |
+| Volatility | √(wᵀ Σ w), with Σ = sample covariance of the last year of daily returns × 252 |
+| Recent volatility | The same, with each day weighted by 0.94 per day of age (RiskMetrics), so a calm or rough patch shows up quickly |
+| Beta / downside beta | Slope of the portfolio's daily returns on the S&P 500's; downside beta uses only days the market fell |
 | Share of risk | wᵢ (Σw)ᵢ / wᵀ Σ w (sums to 100%) |
 | Effective positions | 1 / Σ wᵢ² |
-| Max drawdown | largest peak-to-trough fall of today's holdings over the year |
-| Stress test | Σ βᵢ × (−10%) × valueᵢ |
+| Bad-day and bad-week losses | Historical: over n days (or overlapping 5-day weeks), "1 in 20" is the k-th worst with k = n/20 rounded up, plus the average of those k worst. "1 in 100" likewise. No bell curve is assumed |
+| Worst day / week / month | The worst 1, 5 and 21-session stretch in the loaded history, in today's dollars |
+| Drawdown | Largest peak-to-trough fall of today's holdings over the past year and the full loaded history, sessions to recover, and what a fall that size would cost at today's value |
+| Market drops | Each holding moves by downside beta × the drop (−10%, −20%, −35%), capped at a total loss |
+| Crash replays | 2008, late 2018, Covid 2020 and 2022 replayed on today's holdings (below) |
+
+Holdings that started trading partway through the history have their earlier days filled with beta × the market's return, rather than treated as flat, so a young fund doesn't look calmer than it is. Those holdings are listed, along with any price that hasn't changed for three sessions while the market moved.
+
+**Crash replays.** Each holding uses, in order: its own actual move over the crash (close on or before the start to close on or before the end); the actual move of what it tracks if it's younger than the crash (SPY for VOO, bitcoin for IBIT, QQQ for QQQM, gold for GLDM...); or downside beta × the market's move, marked as estimated. A beta estimate only captures how a holding moves with stocks, so for crypto or narrow themes it understates the loss: in the 2022 replay IBIT is −58.8% via bitcoin, where a beta estimate gave about −22%. If the market's own prices for a crash aren't available, the S&P 500 index's peak-to-trough move is used and labelled as such.
 
 ### Options-implied earnings move
 ```
@@ -120,8 +128,12 @@ market-adjusted move = stock return − β × SPY return     (since the decision
 | Share of risk, effective positions | Two uncorrelated, equally volatile, equal-weight stocks give 50% / 50% and 2.0; four equal positions give 4.0 | `test_risk_shares_split_evenly…`, `test_effective_positions_equal_weights` |
 | Volatility | Equals the sample standard deviation of weighted daily returns × √252 | `test_volatility_by_hand` |
 | Portfolio beta | Equals the weighted sum of holding betas (an identity) | `test_portfolio_beta_is_weighted_sum_of_betas` |
-| Max drawdown | 100 → 120 → 90 → 110 gives −25%, −$30 | `test_max_drawdown_by_hand` |
+| Max drawdown | 100 → 120 → 90 → 110 gives −25%; at today's $110 that's −$28 | `test_max_drawdown_by_hand` |
 | Stress test | β = 1.5, $10,000 position gives −$1,500 | `test_stress_test_by_hand` |
+| Bad-day losses | 100 days with four −5% and one −4%: 1 in 20 = −4%, average of those = −4.8% | `test_bad_day_losses_by_hand` (tests/test_risk.py) |
+| Downside beta | A stock that moves 2× on down days and 0.5× on up days has downside beta exactly 2 | `test_downside_beta_only_uses_falling_days` |
+| Young holdings | Days before listing are filled with beta × market, not flat | `test_days_before_listing_are_filled_from_beta` |
+| Crash replays | Actual moves where available, then what a fund tracks, then beta (marked) | `test_crash_replay_uses_actual_moves_where_it_can`, `test_crash_replay_uses_what_a_young_fund_tracks` |
 | Implied move | Call mid 3.1 + put mid 2.9 on spot 100.4 gives 6.0% | `test_implied_move_by_hand` |
 | Journal review | A stock that moves exactly with the market shows 0% market-adjusted | `test_journal_market_adjusted_move_by_hand` |
 | Drift and rebalance | 80/20 against 70/30 on $10,000: sell $1,000 of A, buy $1,000 of B | `test_drift_and_rebalance_by_hand` (tests/test_allocation.py) |
@@ -141,5 +153,6 @@ market-adjusted move = stock return − β × SPY return     (since the decision
 - **The sector ETF contains the stock.** NVDA is a large part of XLK, so on a big NVDA-specific day some of its own move shows up as "sector".
 - **No industry factor.** A move across the whole semiconductor industry is counted as stock-specific for each chip stock.
 - **Betas are estimates.** With one year of daily data, a typical standard error is ±0.1 for b_mkt and ±0.2 for b_sec.
+- **History-based risk** only knows the past it has: bad-day losses and drawdowns come from about two years of data, so they won't include a crash bigger than anything in that window. The crash replays exist to fill that gap.
 - **Implied move** includes some ordinary volatility when the first usable expiry is several days after earnings.
 - **The journal review** applies one beta to the whole move since a decision. Compounding makes this approximate over long periods.

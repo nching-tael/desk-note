@@ -12,7 +12,7 @@ import pandas as pd
 
 from ..data import MARKET, sector_etf
 from ..portfolio import replay
-from . import allocation, charts, exposure, journal, research, risk, scorecard
+from . import allocation, charts, exposure, journal, research, risk, scorecard, stress
 from .exposure import classify_fund
 from .periods import (
     PERIOD_SESSIONS,
@@ -434,6 +434,9 @@ class Analytics:
 
     def risk(self):
         return risk.report(self)
+
+    def stress(self):
+        return stress.report(self)
 
     def news(self, symbols, days=7, limit=8):
         return research.news(self, symbols, days, limit)

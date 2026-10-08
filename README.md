@@ -33,7 +33,7 @@ The screenshot uses mock mode (synthetic prices and news). The figures are real 
 
 **How your decisions worked out.** When you record a trade you can say why. Reviewing the journal later compares each decision with what the stock did afterwards, adjusted for the market.
 
-**Risk in dollars.** Volatility, beta, a 10% market drop stress test, and the options-implied move into upcoming earnings on each position.
+**Risk in dollars.** What a bad day or week has cost this mix of holdings (1 in 20, 1 in 100), the worst day, week and month, drawdowns and how long they took to recover, how holdings behave when the market falls (downside beta), market drops of 10, 20 and 35%, and replays of 2008, 2018, 2020 and 2022 on today's holdings. Plus the options-implied move into upcoming earnings.
 
 ## Running it
 
@@ -90,8 +90,8 @@ Web UI ── agent.py ─┘                   └── store.py (SQLite)
 ```
 
 - `app/data/`: market data providers. `yahoo.py` wraps yfinance with a disk cache and falls back through three news sources; `mock.py` generates a deterministic market with a scripted week.
-- `app/analytics/`: all the calculations. `core.py` loads prices and works out daily gains, returns and attribution; `exposure.py` classifies funds and looks through them; `allocation.py` and `scorecard.py` handle targets and satellites; `risk.py`, `research.py`, `journal.py` and `charts.py` cover the rest.
-- `app/tools.py`: the 18 tools Claude can call, each defined next to its handler.
+- `app/analytics/`: all the calculations. `core.py` loads prices and works out daily gains, returns and attribution; `exposure.py` classifies funds and looks through them; `tail.py` and `stress.py` do the history-based risk and crash replays; `allocation.py` and `scorecard.py` handle targets and satellites; `risk.py`, `research.py`, `journal.py` and `charts.py` cover the rest.
+- `app/tools.py`: the 19 tools Claude can call, each defined next to its handler.
 - `app/grounding.py`: checks that every number in an answer appears in a tool result.
 - `app/store.py`: trades, theses and the journal in SQLite.
 - `app/mcp_server.py`, `app/agent.py`, `app/server.py`: the MCP server, the web app's agent loop and its FastAPI server.
@@ -101,7 +101,7 @@ Attribution fits `return = a + b_mkt × SPY + b_sec × (sector ETF − SPY)` for
 The formulas, a worked example you can check by hand, and how each calculation is tested are in [docs/methodology.md](docs/methodology.md).
 
 ```bash
-python -m pytest -q    # 139 tests, all offline
+python -m pytest -q    # 154 tests, all offline
 ruff check .
 ```
 

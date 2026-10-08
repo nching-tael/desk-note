@@ -254,10 +254,11 @@ def test_effective_positions_equal_weights():
 
 
 def test_max_drawdown_by_hand():
-    # 100 -> 120 -> 90 -> 110: worst fall is 120 -> 90 = -25%, -$30 on one share.
+    # 100 -> 120 -> 90 -> 110: worst fall is 120 -> 90 = -25%. At today's value
+    # of $110 a fall that size would cost $27.50.
     closes = frame({"A": [100, 120, 90, 110], "SPY": [400, 404, 400, 408]})
     dd = Analytics(DummyProvider(closes), [Holding("A", 1, None)], {}).load().risk()["max_drawdown_1y"]
-    assert dd["pct"] == -25.0 and dd["dollars"] == -30
+    assert dd["pct"] == -25.0 and dd["dollars_at_todays_value"] == -28
     assert dd["peak_date"] == closes.index[1].date().isoformat()
     assert dd["trough_date"] == closes.index[2].date().isoformat()
     assert dd["recovered"] is False

@@ -10,6 +10,7 @@ CALLS = [
     ("get_attribution", {"period": "1w"}),
     ("get_risk_report", {}),
     ("get_exposure", {}),
+    ("get_stress_test", {}),
     ("get_news", {"symbols": ["NVDA", "MSFT"], "days": 7}),
     ("get_thesis", {"symbol": "NVDA"}),
     ("get_upcoming_events", {"days": 30}),
@@ -21,7 +22,7 @@ CALLS = [
 
 def test_every_tool_has_a_valid_schema():
     names = [t["name"] for t in TOOLS]
-    assert len(names) == len(set(names)) == 11
+    assert len(names) == len(set(names)) == 12
     for t in TOOLS:
         assert t["description"] and t["input_schema"]["type"] == "object"
         json.dumps(t)

@@ -148,10 +148,11 @@ def get_attribution(ctx, args):
 @tool(
     "get_risk_report",
     """
-    Risk report at current weights using one year of daily returns: annualised volatility, beta to
-    SPY, each holding's share of total risk, sector weights, effective number of positions, highly
-    correlated pairs and groups of holdings that move together, 1-year max drawdown, and a stress
-    test of the $ impact if SPY falls 10%.""",
+    Risk report at current weights: volatility (past year and recent), beta and downside beta to
+    the S&P 500, each holding's share of total risk, look-through sector weights, concentration,
+    correlated groups, historical bad-day and bad-week losses (1 in 20, 1 in 100, and the average of
+    those bad days), worst day/week/month, drawdowns with recovery time, market-drop stress tests,
+    and data-quality warnings. Quote the $ figures; mention data_quality warnings if any.""",
     describe=lambda args: "Ran the risk report: volatility, concentration, correlations, stress test",
 )
 def get_risk_report(ctx, args):
@@ -202,6 +203,18 @@ def get_allocation(ctx, args):
 )
 def get_scorecard(ctx, args):
     return ctx.analytics.scorecard(args.get("period") or "1y")
+
+
+@tool(
+    "get_stress_test",
+    """
+    What today's holdings would lose if the market fell 10%, 20% or 35% (using downside beta), and
+    replays of real crashes (2008, late 2018, 2020 Covid, 2022) on today's holdings: actual moves
+    where a holding traded through the crash, estimates (clearly marked) where it didn't exist yet.""",
+    describe=lambda args: "Stress-tested your holdings against market drops and past crashes",
+)
+def get_stress_test(ctx, args):
+    return ctx.analytics.stress()
 
 
 @tool(
@@ -563,7 +576,13 @@ def headline(name, result):
             f"vs SPY {result['market_spy_pct']:+.1f}%"
         )
     if name == "get_risk_report":
-        return f"Volatility {result['volatility_annual_pct']}%/yr, beta {result['beta_to_spy']}"
+        bad_day = result["bad_day_losses"].get("1_in_20", {}).get("loss_dollars")
+        return f"Volatility {result['volatility_annual_pct']}%/yr, beta {result['beta_to_spy']}" + (
+            f", 1-in-20 bad day ${bad_day:,}" if bad_day is not None else ""
+        )
+    if name == "get_stress_test":
+        worst = min(result["crash_replays"], key=lambda c: c["dollars"])
+        return f"Worst replay: {worst['name']}, ${worst['dollars']:,} ({worst['pct']}%)"
     if name == "get_upcoming_events":
         return f"{len(result['events'])} earnings event(s) found"
     if name == "get_allocation" and result.get("targets_set"):
