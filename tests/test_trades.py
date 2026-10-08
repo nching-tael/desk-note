@@ -10,8 +10,8 @@ from app.portfolio import Holding, PortfolioError, Trade, load_holdings, load_th
 def test_replay_average_cost_and_realised():
     opening = [Holding("NVDA", 10, 100.0)]
     trades = [
-        Trade(date(2026, 1, 5), "NVDA", "buy", 10, 200.0),   # avg -> 150
-        Trade(date(2026, 2, 5), "NVDA", "sell", 5, 180.0),   # realised 5 * 30
+        Trade(date(2026, 1, 5), "NVDA", "buy", 10, 200.0),  # avg -> 150
+        Trade(date(2026, 2, 5), "NVDA", "sell", 5, 180.0),  # realised 5 * 30
         Trade(date(2026, 3, 5), "AMD", "buy", 4, 50.0),
     ]
     book = replay(opening, trades)
@@ -51,8 +51,10 @@ def test_shares_change_at_trade_dates(traded):
 def test_attribution_still_sums_with_trades(traded):
     for period in ("1d", "1w", "1m"):
         df, w = traded.attribution_frame(period)
-        np.testing.assert_allclose(df["market"] + df["sector_move"] + df["stock_specific"], df["total"], atol=1e-6)
-        assert df["total"].sum() == pytest.approx(traded.pnl.iloc[w.start_pos + 1:w.end_pos + 1].sum())
+        np.testing.assert_allclose(
+            df["market"] + df["sector_move"] + df["stock_specific"], df["total"], atol=1e-6
+        )
+        assert df["total"].sum() == pytest.approx(traded.pnl.iloc[w.start_pos + 1 : w.end_pos + 1].sum())
     df, _ = traded.attribution_frame("1w")
     assert "LLY" in df.index  # sold mid-week, but its gain before selling counts
 
@@ -80,8 +82,9 @@ def test_risk_and_chart_use_current_holdings(traded):
 def test_thesis_for_holding_bought_today(provider):
     a = Analytics(provider, load_holdings(), load_theses()).load()
     today = a.closes.index[-1].date()
-    b = Analytics(provider, load_holdings(), load_theses(),
-                  trades=[Trade(today, "META", "buy", 5, 700.0, id=1)]).load()
+    b = Analytics(
+        provider, load_holdings(), load_theses(), trades=[Trade(today, "META", "buy", 5, 700.0, id=1)]
+    ).load()
     assert "META" in b.symbols
     t = b.thesis("META")
     assert t["performance"] == {}  # no move yet: bought at today's close

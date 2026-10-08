@@ -279,7 +279,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const charts = [];           // [{canvas, spec, instance}] for theme re-render
   let busy = false;
 
-  // ---------- formatting ----------
+  // formatting
   const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
   const MINUS = "−";
   function usd(v, signed = false) {
@@ -311,7 +311,7 @@ window.addEventListener("DOMContentLoaded", () => {
     return isNaN(d) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
-  // ---------- markdown (graceful) ----------
+  // markdown (graceful)
   function renderMarkdown(text) {
     if (window.marked && window.DOMPurify) {
       try { return window.DOMPurify.sanitize(window.marked.parse(text, { gfm: true, breaks: false })); }
@@ -320,7 +320,7 @@ window.addEventListener("DOMContentLoaded", () => {
     return text.split(/\n{2,}/).map((p) => "<p>" + esc(p).replace(/\n/g, "<br>") + "</p>").join("");
   }
 
-  // ---------- theme ----------
+  // theme
   const THEMES = ["auto", "light", "dark"];
   function getTheme() { try { return localStorage.getItem("desknote-theme") || "auto"; } catch { return "auto"; } }
   function applyTheme(t) {
@@ -337,7 +337,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   if (mq && mq.addEventListener) mq.addEventListener("change", () => rerenderCharts());
 
-  // ---------- charts ----------
+  // charts
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   function seriesColor(role, i) {
     const map = { primary: "--series-1", benchmark: "--bench", market: "--series-1", sector: "--series-2", specific: "--series-3" };
@@ -459,7 +459,7 @@ window.addEventListener("DOMContentLoaded", () => {
     return fig;
   }
 
-  // ---------- overview ----------
+  // overview
   function setChange(id, ch) {
     const node = $(id);
     if (!ch || ch.dollars == null) { node.textContent = "—"; return; }
@@ -503,7 +503,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ---------- chat ----------
+  // chat
   function argString(input) {
     const parts = Object.entries(input || {}).map(([k, v]) => k + ": " + JSON.stringify(v));
     return "(" + parts.join(", ") + ")";
@@ -568,7 +568,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ---------- wire up ----------
+  // wire up
   const chips = $("chips");
   for (const s of SUGGESTIONS) {
     const b = el("button", { class: "chip", type: "button", text: s });

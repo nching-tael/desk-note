@@ -42,15 +42,18 @@ def test_chart_tool_sends_short_note_and_keeps_spec(analytics):
     assert out.chart["series"]
 
 
-@pytest.mark.parametrize("name,inp", [
-    ("get_performance", {"period": "5y"}),
-    ("get_thesis", {"symbol": "NOPE"}),
-    ("get_thesis", {}),
-    ("get_news", {"symbols": []}),
-    ("get_chart", {"kind": "stock_vs_market"}),
-    ("get_upcoming_events", {"days": "soon"}),
-    ("no_such_tool", {}),
-])
+@pytest.mark.parametrize(
+    "name,inp",
+    [
+        ("get_performance", {"period": "5y"}),
+        ("get_thesis", {"symbol": "NOPE"}),
+        ("get_thesis", {}),
+        ("get_news", {"symbols": []}),
+        ("get_chart", {"kind": "stock_vs_market"}),
+        ("get_upcoming_events", {"days": "soon"}),
+        ("no_such_tool", {}),
+    ],
+)
 def test_errors_come_back_as_tool_results(analytics, name, inp):
     out = run_tool(analytics, name, inp)
     assert out.is_error

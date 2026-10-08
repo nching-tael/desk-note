@@ -4,6 +4,7 @@ the data, not against the code's own output.
 Each test builds a tiny dummy portfolio from prices chosen so the expected
 result can be checked with pencil and paper (shown in the comments).
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -14,7 +15,9 @@ import pandas as pd
 import pytest
 
 from app.analytics import TRADING_DAYS, Analytics
-from app.data import DataProvider, LiveProvider, _MOCK_STOCKS
+from app.data import DataProvider
+from app.data.mock import STOCKS as MOCK_STOCKS
+from app.data.yahoo import implied_move
 from app.portfolio import Holding, Trade, replay
 
 
@@ -106,7 +109,7 @@ def test_overview_by_hand():
     assert o["day_change"] == {"dollars": 90, "pct": 6.1}  # 90 / 1485
     a = o["positions"][0]
     assert a["shares"] == 15 and a["unrealised_pl"] == 165  # 15 x (105 - 94)
-    assert o["unrealised_pl"]["cost_basis_total"] == 1410   # 15 x 94
+    assert o["unrealised_pl"]["cost_basis_total"] == 1410  # 15 x 94
 
 
 def test_scaling_positions_scales_dollars_not_percent():
@@ -128,10 +131,13 @@ def test_without_trades_return_is_simple_value_change():
 
 
 def test_average_cost_and_realised_by_hand():
-    book = replay([Holding("A", 10, 90.0)], [
-        Trade(date(2026, 1, 2), "A", "buy", 5, 102.0),   # avg (900 + 510) / 15 = 94
-        Trade(date(2026, 1, 5), "A", "sell", 6, 105.0),  # realised (105 - 94) x 6 = 66
-    ])
+    book = replay(
+        [Holding("A", 10, 90.0)],
+        [
+            Trade(date(2026, 1, 2), "A", "buy", 5, 102.0),  # avg (900 + 510) / 15 = 94
+            Trade(date(2026, 1, 5), "A", "sell", 6, 105.0),  # realised (105 - 94) x 6 = 66
+        ],
+    )
     assert book["A"].avg_cost == pytest.approx(94)
     assert book["A"].realised == pytest.approx(66)
     assert book["A"].shares == 9
@@ -146,14 +152,20 @@ def test_attribution_total_matches_hand_pnl():
 # 3. Attribution betas: planted answers
 # ---------------------------------------------------------------------------
 
+
 def planted(noise: float = 0.0, n: int = 320, seed: int = 1):
     """STOCK return = 0.0002 + 1.5 x SPY + 0.8 x (XLK - SPY) + noise, exactly."""
     rng = np.random.default_rng(seed)
     m = rng.normal(0.0004, 0.01, n)
     e = rng.normal(0, 0.006, n)
     r = 0.0002 + 1.5 * m + 0.8 * e + rng.normal(0, noise, n) * (noise > 0)
-    closes = frame({"STOCK": prices_from_returns(r), "SPY": prices_from_returns(m, 500),
-                    "XLK": prices_from_returns(m + e, 200)})
+    closes = frame(
+        {
+            "STOCK": prices_from_returns(r),
+            "SPY": prices_from_returns(m, 500),
+            "XLK": prices_from_returns(m + e, 200),
+        }
+    )
     return Analytics(DummyProvider(closes, {"STOCK": "Technology"}), [Holding("STOCK", 100, None)], {}).load()
 
 
@@ -165,7 +177,7 @@ def test_regression_recovers_exact_planted_betas():
     assert row["beta_mkt"] == pytest.approx(1.5, abs=1e-9)
     assert row["beta_sector"] == pytest.approx(0.8, abs=1e-9)
     # With no noise, "your pick" is only the daily intercept x yesterday's value.
-    prev = a.values["STOCK"].iloc[w.start_pos:w.end_pos]
+    prev = a.values["STOCK"].iloc[w.start_pos : w.end_pos]
     assert row["stock_specific"] == pytest.approx(0.0002 * prev.sum(), rel=1e-6)
 
 
@@ -189,7 +201,7 @@ def test_regression_recovers_mock_generator_betas(analytics):
         coef = np.array([row["beta_mkt"], row["beta_sector"]])
         resid = y - X @ np.concatenate([[y.mean() - (X[:, 1:] @ coef).mean()], coef])
         se = np.sqrt(np.diag(resid.var(ddof=3) * np.linalg.inv(X.T @ X)))[1:]
-        truth = _MOCK_STOCKS[sym]
+        truth = MOCK_STOCKS[sym]
         assert abs(row["beta_mkt"] - truth.beta_mkt) < 3 * se[0], sym
         assert abs(row["beta_sector"] - truth.beta_sec) < 3 * se[1], sym
 
@@ -205,8 +217,8 @@ def test_fit_matches_independent_ols_including_flat_days():
     closes = frame({"THIN": prices_from_returns(r), "SPY": prices_from_returns(m, 500)})
     a = Analytics(DummyProvider(closes), [Holding("THIN", 100, None)], {}).load()
     w = a.window("1w")
-    fit = a._fit_betas("THIN", w)
-    rr = a.returns.iloc[max(1, w.start_pos - TRADING_DAYS + 1):w.start_pos + 1]
+    fit = a.fit_betas("THIN", w)
+    rr = a.returns.iloc[max(1, w.start_pos - TRADING_DAYS + 1) : w.start_pos + 1]
     X = np.column_stack([np.ones(len(rr)), rr["SPY"]])
     expected = np.linalg.solve(X.T @ X, X.T @ rr["THIN"].to_numpy())  # normal equations
     assert fit["beta_mkt"] == pytest.approx(expected[1], abs=1e-9)
@@ -221,13 +233,14 @@ def test_fit_ignores_days_before_listing():
     new[:150] = np.nan  # listed on day 150
     closes = frame({"NEW": list(new), "SPY": prices_from_returns(m, 500)})
     a = Analytics(DummyProvider(closes), [Holding("NEW", 10, None)], {}).load()
-    fit = a._fit_betas("NEW", a.window("1w"))
+    fit = a.fit_betas("NEW", a.window("1w"))
     assert fit["beta_mkt"] == pytest.approx(1.2, abs=1e-9)  # exact: flat pre-listing days excluded
 
 
 # ---------------------------------------------------------------------------
 # 4. Risk
 # ---------------------------------------------------------------------------
+
 
 def symmetric_pair():
     """Two stocks with equal volatility and zero correlation, equal weights.
@@ -237,8 +250,13 @@ def symmetric_pair():
     k = np.arange(TRADING_DAYS + 1)
     x = s * np.where(k % 2 == 0, 1, -1)
     y = s * np.where(k % 4 < 2, 1, -1)
-    closes = frame({"X": prices_from_returns(x), "Y": prices_from_returns(y),
-                    "SPY": prices_from_returns((x + y) / 2, 500)})
+    closes = frame(
+        {
+            "X": prices_from_returns(x),
+            "Y": prices_from_returns(y),
+            "SPY": prices_from_returns((x + y) / 2, 500),
+        }
+    )
     return Analytics(DummyProvider(closes), [Holding("X", 10, None), Holding("Y", 10, None)], {}).load(), x, y
 
 
@@ -290,7 +308,11 @@ def test_stress_test_by_hand():
     rng = np.random.default_rng(5)
     m = rng.normal(0, 0.01, TRADING_DAYS + 1)
     closes = frame({"A": prices_from_returns(1.5 * m, 100), "SPY": prices_from_returns(m, 500)})
-    stress = Analytics(DummyProvider(closes), [Holding("A", 100, None)], {}).load().risk()["stress_test_spy_down_10pct"]
+    stress = (
+        Analytics(DummyProvider(closes), [Holding("A", 100, None)], {})
+        .load()
+        .risk()["stress_test_spy_down_10pct"]
+    )
     assert stress["by_holding"][0]["beta"] == 1.5
     assert stress["dollars"] == -1500 and stress["pct"] == -15.0
 
@@ -299,29 +321,51 @@ def test_stress_test_by_hand():
 # 5. Options-implied earnings move
 # ---------------------------------------------------------------------------
 
+
 def fake_ticker(expiries):
-    calls = pd.DataFrame({"strike": [95, 100, 105], "bid": [6.0, 3.0, 1.0], "ask": [6.4, 3.2, 1.2],
-                          "lastPrice": [6.2, 3.1, 1.1]})
-    puts = pd.DataFrame({"strike": [95, 100, 105], "bid": [1.0, 2.8, 6.0], "ask": [1.2, 3.0, 6.4],
-                         "lastPrice": [1.1, 2.9, 6.2]})
-    return SimpleNamespace(options=expiries,
-                           option_chain=lambda e: SimpleNamespace(calls=calls, puts=puts),
-                           history=lambda **k: pd.DataFrame({"Close": [99.0, 100.4]}))
+    calls = pd.DataFrame(
+        {
+            "strike": [95, 100, 105],
+            "bid": [6.0, 3.0, 1.0],
+            "ask": [6.4, 3.2, 1.2],
+            "lastPrice": [6.2, 3.1, 1.1],
+        }
+    )
+    puts = pd.DataFrame(
+        {
+            "strike": [95, 100, 105],
+            "bid": [1.0, 2.8, 6.0],
+            "ask": [1.2, 3.0, 6.4],
+            "lastPrice": [1.1, 2.9, 6.2],
+        }
+    )
+    return SimpleNamespace(
+        options=expiries,
+        option_chain=lambda e: SimpleNamespace(calls=calls, puts=puts),
+        history=lambda **k: pd.DataFrame({"Close": [99.0, 100.4]}),
+    )
 
 
 def test_implied_move_by_hand():
     # Spot 100.4 -> nearest strike 100. Call mid 3.1 + put mid 2.9 = 6.0; 6.0 / 100.4 = 5.98% -> 6.0
-    move = LiveProvider._implied_move(fake_ticker(("2026-10-09", "2026-10-16")), date(2026, 10, 8))
+    move = implied_move(fake_ticker(("2026-10-09", "2026-10-16")), date(2026, 10, 8))
     assert move == 6.0
 
 
+def test_implied_move_ignores_missing_latest_price():
+    ticker = fake_ticker(("2026-10-09",))
+    ticker.history = lambda **k: pd.DataFrame({"Close": [100.4, float("nan")]})
+    assert implied_move(ticker, date(2026, 10, 8)) == 6.0
+
+
 def test_implied_move_needs_expiry_soon_after_earnings():
-    assert LiveProvider._implied_move(fake_ticker(("2026-10-30",)), date(2026, 10, 8)) is None
+    assert implied_move(fake_ticker(("2026-10-30",)), date(2026, 10, 8)) is None
 
 
 # ---------------------------------------------------------------------------
 # 7. Journal review
 # ---------------------------------------------------------------------------
+
 
 def test_journal_market_adjusted_move_by_hand():
     """MKT moves exactly with SPY (beta 1); HOT moves 2x SPY (beta 2).
@@ -329,15 +373,24 @@ def test_journal_market_adjusted_move_by_hand():
     rng = np.random.default_rng(6)
     n = 320
     m = rng.normal(0.0005, 0.01, n)
-    closes = frame({"MKT": prices_from_returns(m), "HOT": prices_from_returns(2 * m),
-                    "SPY": prices_from_returns(m, 500)})
+    closes = frame(
+        {"MKT": prices_from_returns(m), "HOT": prices_from_returns(2 * m), "SPY": prices_from_returns(m, 500)}
+    )
     a = Analytics(DummyProvider(closes), [Holding("MKT", 10, 50.0), Holding("HOT", 10, 50.0)], {}).load()
     when = closes.index[-21].date().isoformat()
-    review = a.review_journal([
-        {"id": 1, "date": when, "symbol": "MKT", "kind": "buy_reason", "text": "index-like",
-         "trade": {"side": "buy", "shares": 10, "price": float(closes["MKT"].iloc[-21])}},
-        {"id": 2, "date": when, "symbol": "HOT", "kind": "buy_reason", "text": "levered"},
-    ])
+    review = a.review_journal(
+        [
+            {
+                "id": 1,
+                "date": when,
+                "symbol": "MKT",
+                "kind": "buy_reason",
+                "text": "index-like",
+                "trade": {"side": "buy", "shares": 10, "price": float(closes["MKT"].iloc[-21])},
+            },
+            {"id": 2, "date": when, "symbol": "HOT", "kind": "buy_reason", "text": "levered"},
+        ]
+    )
     mkt, hot = (e["outcome"] for e in review["entries"])
     assert mkt["beta"] == 1.0 and mkt["market_adjusted_pct"] == 0.0
     assert mkt["stock_pct"] == mkt["spy_pct"]

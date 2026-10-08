@@ -164,8 +164,14 @@ def test_sector_mapping():
 
 def test_news_normalisation_both_schemas():
     old = {"title": "A", "publisher": "P", "link": "http://x", "providerPublishTime": 1700000000}
-    new = {"content": {"title": "B", "pubDate": "2026-10-01T12:00:00Z",
-                       "provider": {"displayName": "Q"}, "canonicalUrl": {"url": "http://y"}}}
+    new = {
+        "content": {
+            "title": "B",
+            "pubDate": "2026-10-01T12:00:00Z",
+            "provider": {"displayName": "Q"},
+            "canonicalUrl": {"url": "http://y"},
+        }
+    }
     assert normalise_news_item("X", old)["published"] == "2023-11-14T22:13:20Z"
     assert normalise_news_item("X", new)["publisher"] == "Q"
     assert normalise_news_item("X", {"content": {}}) is None

@@ -15,15 +15,21 @@ def mock_analytics(provider):
 
 def fake_client_factory():
     script = [
-        SimpleNamespace(stop_reason="tool_use", content=[
-            SimpleNamespace(type="tool_use", id="t1", name="get_attribution", input={"period": "1w"}),
-            SimpleNamespace(type="tool_use", id="t2", name="get_chart", input={"kind": "attribution"}),
-        ]),
-        SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text="Mostly the market.")]),
+        SimpleNamespace(
+            stop_reason="tool_use",
+            content=[
+                SimpleNamespace(type="tool_use", id="t1", name="get_attribution", input={"period": "1w"}),
+                SimpleNamespace(type="tool_use", id="t2", name="get_chart", input={"kind": "attribution"}),
+            ],
+        ),
+        SimpleNamespace(
+            stop_reason="end_turn", content=[SimpleNamespace(type="text", text="Mostly the market.")]
+        ),
     ]
     create = lambda **kw: script.pop(0)
-    return SimpleNamespace(messages=SimpleNamespace(create=create),
-                           beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+    return SimpleNamespace(
+        messages=SimpleNamespace(create=create), beta=SimpleNamespace(messages=SimpleNamespace(create=create))
+    )
 
 
 def test_index_and_overview(mock_analytics, monkeypatch):
@@ -51,7 +57,9 @@ def test_chat_without_key_returns_clear_error(mock_analytics, monkeypatch):
 
 def test_chat_end_to_end_with_fake_client(mock_analytics):
     client = TestClient(create_app(mock=True, analytics=mock_analytics, client_factory=fake_client_factory))
-    r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "Why did I lose money this week?"}]})
+    r = client.post(
+        "/api/chat", json={"messages": [{"role": "user", "content": "Why did I lose money this week?"}]}
+    )
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["answer"] == "Mostly the market."
@@ -73,9 +81,14 @@ def test_api_errors_are_mapped(mock_analytics):
     def failing():
         def create(**kw):
             req = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-            raise anthropic.AuthenticationError("bad key", response=httpx2.Response(401, request=req), body=None)
-        return SimpleNamespace(messages=SimpleNamespace(create=create),
-                               beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+            raise anthropic.AuthenticationError(
+                "bad key", response=httpx2.Response(401, request=req), body=None
+            )
+
+        return SimpleNamespace(
+            messages=SimpleNamespace(create=create),
+            beta=SimpleNamespace(messages=SimpleNamespace(create=create)),
+        )
 
     client = TestClient(create_app(mock=True, analytics=mock_analytics, client_factory=failing))
     r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})

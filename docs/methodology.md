@@ -1,6 +1,6 @@
 # Methodology and validation
 
-Every number Desk Note reports comes from `app/analytics.py`. This document gives the formula behind each one, what it assumes, and how it's validated. The validation tests are in [`tests/test_math.py`](../tests/test_math.py). They check against answers worked out by hand or planted in the data, not against the code's own output.
+Every number Desk Note reports comes from `app/analytics/`. This document gives the formula behind each one, what it assumes, and how it's validated. The validation tests are in [`tests/test_math.py`](../tests/test_math.py). They check against answers worked out by hand or planted in the data, not against the code's own output.
 
 ## The worked example
 

@@ -1,0 +1,157 @@
+# Headlines for the mock market's scripted week.
+# days_ago counts trading days back from the last session; hour is UTC.
+
+- symbol: MSFT
+  days_ago: 3
+  hour: 21
+  title: Microsoft signals slower growth in data center spending next year
+  summary: >-
+    On its investor call the CFO said capital spending growth will 'moderate meaningfully'
+    in fiscal 2027 as the company digests AI capacity built over the past two years. Azure
+    growth guidance was unchanged.
+
+- symbol: MSFT
+  days_ago: 2
+  hour: 13
+  title: Analysts split on whether Microsoft's capex comments mark a peak in AI spending
+  summary: >-
+    Some analysts read the remarks as a digestion pause; others warned other hyperscalers
+    could follow.
+
+- symbol: NVDA
+  days_ago: 2
+  hour: 16
+  title: Nvidia shares slide as Microsoft's capex comments rattle AI chip stocks
+  summary: >-
+    Nvidia fell the most among large chipmakers. Microsoft is estimated to be one of its
+    largest customers for data center GPUs.
+
+- symbol: NVDA
+  days_ago: 1
+  hour: 15
+  title: Nvidia extends losses; options traders pay up for protection
+  summary: >-
+    Implied volatility rose as investors weighed whether other cloud customers will slow
+    orders.
+
+- symbol: META
+  days_ago: 1
+  hour: 12
+  title: Meta reiterates plan to raise AI infrastructure spending next year
+  summary: >-
+    Meta said it still expects capital expenditure to rise 'significantly' in 2027 to
+    support model training.
+
+- symbol: GOOGL
+  days_ago: 4
+  hour: 14
+  title: Alphabet expands TPU access to outside cloud customers
+  summary: >-
+    Google Cloud will rent its in-house AI chips to more third-party developers, a potential
+    alternative to Nvidia GPUs for some workloads.
+
+- symbol: AVGO
+  days_ago: 2
+  hour: 17
+  title: Broadcom slips with chip stocks after Microsoft spending comments
+  summary: >-
+    Broadcom fell alongside other AI-exposed semiconductor names.
+
+- symbol: TSM
+  days_ago: 1
+  hour: 9
+  title: TSMC to report third-quarter results next week; AI demand in focus
+  summary: >-
+    Investors will look for commentary on 2027 AI accelerator demand and 2nm ramp timing.
+
+- symbol: TSM
+  days_ago: 9
+  hour: 8
+  title: TSMC September revenue rises 38% from a year earlier
+  summary: >-
+    Monthly sales came in ahead of analyst estimates on strong advanced-node demand.
+
+- symbol: LLY
+  days_ago: 3
+  hour: 12
+  title: Eli Lilly's oral GLP-1 pill meets primary goal in late-stage obesity trial
+  summary: >-
+    Patients on the highest dose lost an average of 13.6% of body weight at 72 weeks;
+    discontinuation rates due to side effects were in line with injectables.
+
+- symbol: LLY
+  days_ago: 2
+  hour: 14
+  title: Lilly plans to file oral obesity drug with regulators by year-end
+  summary: >-
+    The company said it has built manufacturing capacity ahead of a potential launch.
+
+- symbol: NVO
+  days_ago: 3
+  hour: 13
+  title: Novo Nordisk shares fall after rival's obesity pill trial data
+  summary: >-
+    Investors worry about competition for Novo's own oral and injectable obesity drugs.
+
+- symbol: XOM
+  days_ago: 3
+  hour: 15
+  title: Oil climbs to seven-week high as OPEC+ extends supply cuts
+  summary: >-
+    Brent crude rose above $78 a barrel after the group extended voluntary cuts through Q1.
+
+- symbol: XOM
+  days_ago: 1
+  hour: 16
+  title: Exxon gains with crude; Guyana output running ahead of schedule
+  summary: >-
+    Exxon said its newest Guyana production vessel reached full capacity early.
+
+- symbol: CVX
+  days_ago: 3
+  hour: 15
+  title: Chevron and other oil majors rise as crude rallies
+  summary: >-
+    Energy was the best-performing sector.
+
+- symbol: AAPL
+  days_ago: 4
+  hour: 11
+  title: Supplier checks point to steady iPhone demand into the holidays
+  summary: >-
+    Analysts said orders at assemblers were tracking in line with last year.
+
+- symbol: AMZN
+  days_ago: 2
+  hour: 18
+  title: AWS adds new AI infrastructure regions in Europe and Asia
+  summary: >-
+    Amazon said the regions will offer both Nvidia GPUs and its own Trainium chips.
+
+- symbol: JPM
+  days_ago: 0
+  hour: 12
+  title: JPMorgan to report earnings next week; investment banking fees seen higher
+  summary: >-
+    Analysts expect advisory and underwriting fees to rise from a year earlier.
+
+- symbol: COST
+  days_ago: 4
+  hour: 21
+  title: Costco September comparable sales rise 6.1%
+  summary: >-
+    E-commerce sales grew 13%.
+
+- symbol: AMD
+  days_ago: 12
+  hour: 14
+  title: AMD shows next-generation MI accelerator roadmap at developer event
+  summary: >-
+    The company reiterated its AI GPU revenue targets for next year.
+
+- symbol: INTC
+  days_ago: 5
+  hour: 13
+  title: Intel names new head of foundry business
+  summary: >-
+    The appointment follows a reorganisation.

@@ -40,8 +40,10 @@ def test_file_store_persists(tmp_path):
     path = tmp_path / "d.db"
     s = Store(path)
     s.seed_from_files()
-    s.add_trade(__import__("app.portfolio", fromlist=["Trade"]).Trade(date(2026, 1, 5), "nvda", "sell", 10, 150.0),
-                reason="trim")
+    s.add_trade(
+        __import__("app.portfolio", fromlist=["Trade"]).Trade(date(2026, 1, 5), "nvda", "sell", 10, 150.0),
+        reason="trim",
+    )
     again = Store(path)
     assert [t.symbol for t in again.trades()] == ["NVDA"]
     assert again.journal()[0]["trade"]["side"] == "sell"
@@ -50,8 +52,17 @@ def test_file_store_persists(tmp_path):
 def test_record_trade_updates_holdings_and_journal(holder):
     before = holder.get().overview()
     nvda_before = next(p for p in before["positions"] if p["symbol"] == "NVDA")["shares"]
-    out = call(holder, "record_trade", {"symbol": "nvda", "side": "sell", "shares": 20, "price": 180,
-                                         "reason": "Taking profits after the capex scare"})
+    out = call(
+        holder,
+        "record_trade",
+        {
+            "symbol": "nvda",
+            "side": "sell",
+            "shares": 20,
+            "price": 180,
+            "reason": "Taking profits after the capex scare",
+        },
+    )
     assert not out.is_error, out.content
     res = json.loads(out.content)
     assert res["position_now"]["shares"] == nvda_before - 20
@@ -66,9 +77,9 @@ def test_record_trade_defaults_price_and_rejects_bad_input(holder):
     out = call(holder, "record_trade", {"symbol": "AMD", "side": "buy", "shares": 5})
     assert "latest close" in json.loads(out.content)["note"]
     for bad in [
-        {"symbol": "AMD", "side": "sell", "shares": 10_000},          # more than held
+        {"symbol": "AMD", "side": "sell", "shares": 10_000},  # more than held
         {"symbol": "AMD", "side": "short", "shares": 1, "price": 1},  # bad side
-        {"symbol": "AMD", "side": "buy", "shares": -1, "price": 1},   # negative
+        {"symbol": "AMD", "side": "buy", "shares": -1, "price": 1},  # negative
         {"symbol": "AMD", "side": "buy", "shares": 1, "price": 1, "date": "2999-01-01"},
         {"symbol": "AMD", "side": "buy", "shares": 1, "price": 1, "date": "not-a-date"},
     ]:
@@ -88,15 +99,26 @@ def test_new_symbol_buy_and_delete(holder):
 
 
 def test_delete_that_breaks_later_sell_is_refused(holder):
-    buy = json.loads(call(holder, "record_trade", {"symbol": "ORCL", "side": "buy", "shares": 5, "price": 250,
-                                                    "date": "2026-09-01"}).content)["recorded"]["id"]
-    call(holder, "record_trade", {"symbol": "ORCL", "side": "sell", "shares": 5, "price": 260, "date": "2026-09-10"})
+    buy = json.loads(
+        call(
+            holder,
+            "record_trade",
+            {"symbol": "ORCL", "side": "buy", "shares": 5, "price": 250, "date": "2026-09-01"},
+        ).content
+    )["recorded"]["id"]
+    call(
+        holder,
+        "record_trade",
+        {"symbol": "ORCL", "side": "sell", "shares": 5, "price": 260, "date": "2026-09-10"},
+    )
     out = call(holder, "delete_trade", {"trade_id": buy})
     assert out.is_error and "break later trades" in json.loads(out.content)["error"]
 
 
 def test_update_thesis(holder):
-    out = call(holder, "update_thesis", {"symbol": "NVDA", "watch_add": ["ORCL", "nvda"], "watch_remove": ["TSM"]})
+    out = call(
+        holder, "update_thesis", {"symbol": "NVDA", "watch_add": ["ORCL", "nvda"], "watch_remove": ["TSM"]}
+    )
     watch = json.loads(out.content)["thesis"]["watch"]
     assert "ORCL" in watch and "TSM" not in watch and "NVDA" not in watch
     assert holder.get().thesis("NVDA")["watch_list"] == watch
@@ -108,9 +130,21 @@ def test_update_thesis(holder):
 def test_journal_review(holder):
     a = holder.get()
     month_ago = a.closes.index[-22].date().isoformat()
-    call(holder, "record_trade", {"symbol": "NVDA", "side": "buy", "shares": 10, "price": 200,
-                                   "date": month_ago, "reason": "AI capex keeps growing"})
-    call(holder, "add_journal_entry", {"text": "Watching LLY oral GLP-1 data", "symbol": "LLY", "kind": "note"})
+    call(
+        holder,
+        "record_trade",
+        {
+            "symbol": "NVDA",
+            "side": "buy",
+            "shares": 10,
+            "price": 200,
+            "date": month_ago,
+            "reason": "AI capex keeps growing",
+        },
+    )
+    call(
+        holder, "add_journal_entry", {"text": "Watching LLY oral GLP-1 data", "symbol": "LLY", "kind": "note"}
+    )
     review = json.loads(call(holder, "review_journal", {}).content)
     by_kind = {e["kind"]: e for e in review["entries"]}
     buy = by_kind["buy_reason"]

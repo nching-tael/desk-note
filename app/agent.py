@@ -1,17 +1,13 @@
-"""Claude tool-use loop.
+"""The web app's Claude loop: send the conversation and tools, run whatever
+tools Claude asks for, send the results back, and repeat until it answers.
 
-``run_agent`` sends the conversation plus tool schemas to Claude, executes any
-tool calls against the analytics layer, feeds the results back, and repeats
-until Claude answers (or the step limit is hit). It returns::
-
-    {"answer": str, "trace": [tool call summaries], "charts": [chart specs]}
+    python -m app.agent "why did I lose money this week?" --mock
 """
+
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
 
-from .analytics import Analytics
 from .tools import TOOLS, run_tool
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
@@ -19,9 +15,9 @@ MAX_STEPS = 8
 MAX_TOKENS = 16000
 MAX_HISTORY = 20
 
-# Models that accept server-side refusal fallbacks (`fallbacks: "default"`).
-_FALLBACK_MODELS = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"}
-_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# Models that support server-side refusal fallbacks.
+FALLBACK_MODELS = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"}
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 SYSTEM_PROMPT = """\
 You are Desk Note, a personal portfolio analyst for a retail investor. You answer questions about \
@@ -57,139 +53,122 @@ portfolio vs the market). Charts are shown to the user under your answer; refer 
 """
 
 
-def _context_note(analytics: Analytics) -> str:
-    analytics.load()
-    holdings = ", ".join(analytics.symbols)
-    theses = ", ".join(sorted(analytics.theses)) or "none"
+def system_prompt(analytics):
     source = "synthetic demo data (mock mode)" if analytics.provider.is_mock else "Yahoo Finance"
-    return (f"\n\nContext: latest prices are from {analytics.as_of} (may be intraday in live mode), source: {source}. "
-            f"Holdings: {holdings}. Theses on file for: {theses}.")
+    theses = ", ".join(sorted(analytics.theses)) or "none"
+    return (
+        f"{SYSTEM_PROMPT}\n"
+        f"Context: latest prices are from {analytics.as_of} (may be intraday in live mode), "
+        f"source: {source}. Holdings: {', '.join(analytics.symbols)}. Theses on file for: {theses}."
+    )
 
 
-def _get(block: Any, key: str, default: Any = None) -> Any:
-    if isinstance(block, dict):
-        return block.get(key, default)
-    return getattr(block, key, default)
-
-
-def _text_of(content: list[Any]) -> str:
-    return "\n\n".join(_get(b, "text", "") for b in content if _get(b, "type") == "text").strip()
-
-
-def clean_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Keep plain-text user/assistant turns, trimmed to the recent history,
-    starting with a user turn and with consecutive same-role turns merged."""
-    out: list[dict[str, str]] = []
-    for m in messages[-MAX_HISTORY:]:
-        role = m.get("role") if isinstance(m, dict) else None
-        content = m.get("content") if isinstance(m, dict) else None
+def clean_history(messages):
+    """Recent plain-text turns only, starting with the user, with back-to-back
+    turns from the same role merged (the API requires alternating roles)."""
+    history = []
+    for message in messages[-MAX_HISTORY:]:
+        role, content = message.get("role"), message.get("content")
         if role not in ("user", "assistant") or not isinstance(content, str) or not content.strip():
             continue
         content = content.strip()[:8000]
-        if out and out[-1]["role"] == role:
-            out[-1]["content"] += "\n\n" + content
+        if history and history[-1]["role"] == role:
+            history[-1]["content"] += "\n\n" + content
         else:
-            out.append({"role": role, "content": content})
-    while out and out[0]["role"] != "user":
-        out.pop(0)
-    if not out or out[-1]["role"] != "user":
+            history.append({"role": role, "content": content})
+
+    while history and history[0]["role"] != "user":
+        history.pop(0)
+    if not history or history[-1]["role"] != "user":
         raise ValueError("The conversation must end with a user message.")
-    return out
+    return history
 
 
-def make_client():
-    import anthropic
+def run_agent(messages, analytics, client=None, model=None, max_steps=MAX_STEPS, on_tool=None):
+    """Returns {answer, trace, charts, model, steps}. After max_steps rounds of
+    tool calls, Claude has to answer with what it has."""
+    if client is None:
+        import anthropic
 
-    return anthropic.Anthropic()
-
-
-def run_agent(
-    messages: list[dict[str, Any]],
-    analytics: Analytics,
-    client: Any = None,
-    model: str | None = None,
-    max_steps: int = MAX_STEPS,
-    on_tool: Callable[[dict[str, Any]], None] | None = None,
-) -> dict[str, Any]:
-    """Run the tool-use loop. ``max_steps`` caps the number of tool-using
-    rounds; if Claude still wants tools after that, it is asked to answer with
-    what it has."""
-    client = client or make_client()
+        client = anthropic.Anthropic()
     model = model or os.getenv("ANTHROPIC_MODEL") or DEFAULT_MODEL
+    analytics.load()
+
+    request = {
+        "model": model,
+        "max_tokens": MAX_TOKENS,
+        "system": system_prompt(analytics),
+        "tools": TOOLS,
+        "cache_control": {"type": "ephemeral"},
+    }
     effort = os.getenv("ANTHROPIC_EFFORT", "medium")
-    use_fallbacks = model in _FALLBACK_MODELS and os.getenv("DESK_NOTE_FALLBACKS", "1") != "0"
+    if effort and "haiku" not in model:
+        request["output_config"] = {"effort": effort}
 
-    convo: list[dict[str, Any]] = list(clean_history(messages))
-    system = SYSTEM_PROMPT + _context_note(analytics)
-    trace: list[dict[str, Any]] = []
-    charts: list[dict[str, Any]] = []
+    def ask(conversation, final=False):
+        extra = {"tool_choice": {"type": "none"}} if final else {}
+        if model in FALLBACK_MODELS and os.getenv("DESK_NOTE_FALLBACKS", "1") != "0":
+            return client.beta.messages.create(
+                **request, **extra, messages=conversation, betas=[FALLBACK_BETA], fallbacks="default"
+            )
+        return client.messages.create(**request, **extra, messages=conversation)
 
-    def create(final: bool = False):
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "max_tokens": MAX_TOKENS,
-            "system": system,
-            "tools": TOOLS,
-            "messages": convo,
-            "cache_control": {"type": "ephemeral"},
-        }
-        if final:
-            kwargs["tool_choice"] = {"type": "none"}
-        if effort and "haiku" not in model:
-            kwargs["output_config"] = {"effort": effort}
-        if use_fallbacks:
-            return client.beta.messages.create(betas=[_FALLBACK_BETA], fallbacks="default", **kwargs)
-        return client.messages.create(**kwargs)
-
-    response = create()
+    conversation = clean_history(messages)
+    trace, charts = [], []
     steps = 0
-    while _get(response, "stop_reason") == "tool_use":
-        if steps >= max_steps:
-            convo.append({"role": "assistant", "content": _get(response, "content")})
-            skipped = [{"type": "tool_result", "tool_use_id": _get(b, "id"), "is_error": True,
-                        "content": "Not run: step limit reached."}
-                       for b in _get(response, "content") or [] if _get(b, "type") == "tool_use"]
-            convo.append({"role": "user", "content": skipped + [
-                {"type": "text", "text": "Step limit reached. Answer now using only the tool results you already have."}]})
-            response = create(final=True)
-            break
-        steps += 1
-        convo.append({"role": "assistant", "content": _get(response, "content")})
-        convo.append({"role": "user", "content": _tool_results(response, analytics, trace, charts, on_tool)})
-        response = create()
+    response = ask(conversation)
 
-    stop = _get(response, "stop_reason")
-    answer = _text_of(_get(response, "content") or [])
-    if stop == "refusal":
+    while response.stop_reason == "tool_use":
+        calls = [block for block in response.content if block.type == "tool_use"]
+        conversation.append({"role": "assistant", "content": response.content})
+
+        if steps == max_steps:
+            skipped = [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": call.id,
+                    "is_error": True,
+                    "content": "Not run: step limit reached.",
+                }
+                for call in calls
+            ]
+            note = {
+                "type": "text",
+                "text": "Step limit reached. Answer now using only the tool results you have.",
+            }
+            conversation.append({"role": "user", "content": skipped + [note]})
+            response = ask(conversation, final=True)
+            break
+
+        results = []
+        for call in calls:
+            outcome = run_tool(analytics, call.name, call.input)
+            trace.append(outcome.trace_entry())
+            if on_tool:
+                on_tool(trace[-1])
+            if outcome.chart:
+                charts.append(outcome.chart)
+            result = {"type": "tool_result", "tool_use_id": call.id, "content": outcome.content}
+            if outcome.is_error:
+                result["is_error"] = True
+            results.append(result)
+        # all results go back in one message, so Claude keeps making parallel calls
+        conversation.append({"role": "user", "content": results})
+        steps += 1
+        response = ask(conversation)
+
+    answer = "\n\n".join(b.text for b in response.content if b.type == "text").strip()
+    if response.stop_reason == "refusal":
         answer = answer or "I can't help with that request."
     elif not answer:
         answer = "I couldn't put together an answer this time. Please try rephrasing the question."
-    elif stop == "max_tokens":
+    elif response.stop_reason == "max_tokens":
         answer += "\n\n_(Answer cut off at the length limit.)_"
+
     return {"answer": answer, "trace": trace, "charts": charts, "model": model, "steps": steps}
 
 
-def _tool_results(response: Any, analytics: Analytics, trace: list, charts: list,
-                  on_tool: Callable[[dict[str, Any]], None] | None) -> list[dict[str, Any]]:
-    results = []
-    for block in _get(response, "content") or []:
-        if _get(block, "type") != "tool_use":
-            continue
-        outcome = run_tool(analytics, _get(block, "name"), _get(block, "input") or {})
-        entry = outcome.trace_entry()
-        trace.append(entry)
-        if on_tool:
-            on_tool(entry)
-        if outcome.chart:
-            charts.append(outcome.chart)
-        result = {"type": "tool_result", "tool_use_id": _get(block, "id"), "content": outcome.content}
-        if outcome.is_error:
-            result["is_error"] = True
-        results.append(result)
-    return results
-
-
-def main(argv: list[str] | None = None) -> int:
+def main():
     import argparse
     import sys
 
@@ -198,20 +177,26 @@ def main(argv: list[str] | None = None) -> int:
     from .analytics import AnalyticsHolder
 
     load_dotenv()
-    ap = argparse.ArgumentParser(description="Ask Desk Note a question from the command line.")
-    ap.add_argument("question")
-    ap.add_argument("--mock", action="store_true", help="use synthetic data (no network for prices)")
-    ap.add_argument("--model", default=None)
-    args = ap.parse_args(argv)
+    parser = argparse.ArgumentParser(description="Ask Desk Note a question from the command line.")
+    parser.add_argument("question")
+    parser.add_argument("--mock", action="store_true", help="use synthetic market data")
+    parser.add_argument("--model")
+    args = parser.parse_args()
+
     if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")):
         print("Add ANTHROPIC_API_KEY to .env to start chatting.", file=sys.stderr)
         return 2
+
     analytics = AnalyticsHolder(mock=args.mock).get()
-    result = run_agent([{"role": "user", "content": args.question}], analytics, model=args.model,
-                       on_tool=lambda e: print(f"  · {e['summary']}", file=sys.stderr))
+    result = run_agent(
+        [{"role": "user", "content": args.question}],
+        analytics,
+        model=args.model,
+        on_tool=lambda step: print("  -", step["summary"], file=sys.stderr),
+    )
     print("\n" + result["answer"] + "\n")
-    for c in result["charts"]:
-        print(f"[chart] {c['title']}")
+    for chart in result["charts"]:
+        print("[chart]", chart["title"])
     return 0
 
 

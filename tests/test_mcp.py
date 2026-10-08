@@ -48,8 +48,10 @@ def test_call_tools_end_to_end(holder):
             att = await client.call_tool("get_attribution", {"period": "1w"})
             chart = await client.call_tool("get_chart", {"kind": "attribution"})
             bad = await client.call_tool("get_thesis", {"symbol": "ZZZZ"})
-            trade = await client.call_tool("record_trade", {"symbol": "NVDA", "side": "sell", "shares": 20,
-                                                            "price": 180, "reason": "trim"})
+            trade = await client.call_tool(
+                "record_trade",
+                {"symbol": "NVDA", "side": "sell", "shares": 20, "price": 180, "reason": "trim"},
+            )
             overview = await client.call_tool("get_overview", {})
             prompt = await client.get_prompt("check_thesis", {"symbol": "nvda"})
             return att, chart, bad, trade, overview, prompt
@@ -65,9 +67,16 @@ def test_call_tools_end_to_end(holder):
     assert "NVDA" in prompt.messages[0].content.text
 
 
-INIT = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-        "params": {"protocolVersion": "2025-06-18", "capabilities": {},
-                   "clientInfo": {"name": "test", "version": "1"}}}
+INIT = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "1"},
+    },
+}
 HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
 
@@ -75,7 +84,10 @@ def test_http_token_gate(holder):
     with TestClient(create_http_app(holder, TOKEN)) as client:
         assert client.post("/mcp", json=INIT, headers=HEADERS).status_code == 401
         assert client.post("/wrong-token/mcp", json=INIT, headers=HEADERS).status_code == 401
-        assert client.post("/mcp", json=INIT, headers={**HEADERS, "Authorization": "Bearer nope"}).status_code == 401
+        assert (
+            client.post("/mcp", json=INIT, headers={**HEADERS, "Authorization": "Bearer nope"}).status_code
+            == 401
+        )
 
         ok = client.post(f"/{TOKEN}/mcp", json=INIT, headers=HEADERS)
         assert ok.status_code == 200, ok.text
@@ -84,6 +96,7 @@ def test_http_token_gate(holder):
         bearer = client.post("/mcp", json=INIT, headers={**HEADERS, "Authorization": f"Bearer {TOKEN}"})
         assert bearer.status_code == 200
         # Behind a tunnel the Host header is the public name; that must still work.
-        tunneled = client.post(f"/{TOKEN}/mcp", json=INIT,
-                               headers={**HEADERS, "Host": "pi.tailnet-1234.ts.net"})
+        tunneled = client.post(
+            f"/{TOKEN}/mcp", json=INIT, headers={**HEADERS, "Host": "pi.tailnet-1234.ts.net"}
+        )
         assert tunneled.status_code == 200

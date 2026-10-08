@@ -1,9 +1,8 @@
 .venv/
 __pycache__/
 *.pyc
-.cache/
+/.cache/
 .env
 .pytest_cache/
 .DS_Store
-.playwright-mcp/
-data/
+/data/

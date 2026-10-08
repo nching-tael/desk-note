@@ -1,4 +1,5 @@
 """Agent loop tests with a fake Anthropic client issuing scripted tool calls."""
+
 import json
 from types import SimpleNamespace
 
@@ -37,15 +38,24 @@ class FakeClient:
 
 
 def test_collects_trace_and_charts(analytics):
-    client = FakeClient([
-        response("tool_use", text("Let me check."),
-                 tool_use("t1", "get_attribution", {"period": "1w"}),
-                 tool_use("t2", "get_chart", {"kind": "attribution", "period": "1w"})),
-        response("tool_use", tool_use("t3", "get_news", {"symbols": ["NVDA"], "days": 7})),
-        response("end_turn", text("You lost money mostly because of the market.")),
-    ])
-    out = run_agent([{"role": "user", "content": "Why did I lose money this week?"}], analytics,
-                    client=client, model="claude-sonnet-5-5")
+    client = FakeClient(
+        [
+            response(
+                "tool_use",
+                text("Let me check."),
+                tool_use("t1", "get_attribution", {"period": "1w"}),
+                tool_use("t2", "get_chart", {"kind": "attribution", "period": "1w"}),
+            ),
+            response("tool_use", tool_use("t3", "get_news", {"symbols": ["NVDA"], "days": 7})),
+            response("end_turn", text("You lost money mostly because of the market.")),
+        ]
+    )
+    out = run_agent(
+        [{"role": "user", "content": "Why did I lose money this week?"}],
+        analytics,
+        client=client,
+        model="claude-sonnet-5-5",
+    )
     assert out["answer"] == "You lost money mostly because of the market."
     assert [t["tool"] for t in out["trace"]] == ["get_attribution", "get_chart", "get_news"]
     assert all(t["ok"] for t in out["trace"])
@@ -68,10 +78,12 @@ def test_collects_trace_and_charts(analytics):
 
 
 def test_tool_errors_are_returned_to_model_not_raised(analytics):
-    client = FakeClient([
-        response("tool_use", tool_use("t1", "get_thesis", {"symbol": "ZZZZ"})),
-        response("end_turn", text("I don't have a thesis for ZZZZ.")),
-    ])
+    client = FakeClient(
+        [
+            response("tool_use", tool_use("t1", "get_thesis", {"symbol": "ZZZZ"})),
+            response("end_turn", text("I don't have a thesis for ZZZZ.")),
+        ]
+    )
     out = run_agent([{"role": "user", "content": "Thesis on ZZZZ?"}], analytics, client=client)
     assert out["trace"][0]["ok"] is False
     result = client.calls[1]["messages"][-1]["content"][0]
