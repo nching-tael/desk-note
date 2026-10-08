@@ -83,6 +83,8 @@ On first run these seed a SQLite database (`data/desknote.db`). From then on, te
 
 ## How it works
 
+The formulas, a hand-worked example and how each calculation is validated are in **[docs/methodology.md](docs/methodology.md)**.
+
 ```
                     ┌──────────────── tools.py (14 tools, one dispatcher) ────────────────┐
 Claude app ── MCP ──┤                                                                      │
@@ -113,13 +115,14 @@ Web UI ── agent.py ─┤   analytics.py (all maths)   store.py (SQLite)   d
 - `app/mcp_server.py`: MCP over stdio or HTTP
 - `app/agent.py`, `app/server.py`, `app/static/index.html`: the web app
 - `deploy/`: Pi install and systemd
-- `tests/`: 83 tests, all offline: `python -m pytest -q`
+- `tests/`: 105 tests, all offline, including hand-checked maths in `tests/test_math.py`: `python -m pytest -q`
 
 ## Limitations
 
 - **Yahoo Finance data quality.** yfinance is an unofficial API. Prices can lag, sectors can be missing (those holdings fall back to a market-only model), and options data may be missing (no implied move). Its news feed is often empty, so Desk Note falls back to Yahoo search and then RSS. In Claude, its web search covers the news properly.
-- **Trades execute at the close.** A trade affects positions from the close of its date, and same-day intraday gains aren't counted. Opening positions are assumed held through the whole price history. Dividends and cash aren't modelled.
-- **Simple models.** Betas are estimates. A move across the whole semiconductor industry counts as "stock-specific" because the model has no industry factor. Implied moves use an at-the-money straddle approximation.
+- **Trades execute at the close.** A trade affects positions from the close of its date, and same-day intraday gains aren't counted. Opening positions are assumed held through the whole price history. Cash isn't modelled, and dividends count as reinvested (Yahoo's adjusted prices).
+- **Average cost, not FIFO.** Realised P/L won't match broker tax forms, which usually use first-in-first-out.
+- **Simple models.** Betas are estimates (about ±0.1 for the market beta). A move across the whole semiconductor industry counts as "stock-specific" because the model has no industry factor, and a sector ETF includes the stock itself (NVDA is a large part of XLK). Implied moves use an at-the-money straddle approximation.
 - **Token auth.** The remote MCP endpoint is protected by a secret token in its URL. That's fine for one person; use OAuth before sharing it.
 - **Not investment advice.** Desk Note lays out facts and considerations. It doesn't recommend trades, and it never connects to a brokerage.
 

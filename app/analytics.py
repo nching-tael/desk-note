@@ -136,6 +136,7 @@ class Analytics:
         closes = closes.ffill(limit=5)
 
         held = []
+        listed: dict[str, int] = {}  # position of each symbol's first real price
         for sym in symbols:
             series = closes.get(sym)
             if series is None or series.dropna().empty:
@@ -146,6 +147,7 @@ class Analytics:
                 if first is not None and first > closes.index[0] + pd.Timedelta(days=400):
                     self.warnings.append(f"{sym} has less than a year of price history.")
                 closes[sym] = series.bfill()  # flat before listing: no fake returns
+            listed[sym] = int(closes.index.get_loc(series.first_valid_index()))
             held.append(sym)
         for etf in etfs:
             if closes.get(etf) is None or closes[etf].dropna().empty:
@@ -171,6 +173,7 @@ class Analytics:
         shares = shares.clip(lower=0.0)
         book = replay(self.holdings, [t for t in self.trades if t.symbol in held])
 
+        self.listed_pos = listed
         self.all_symbols = held  # everything held at some point in the history
         self.shares_df = shares
         self.shares = shares.iloc[-1]
@@ -338,7 +341,9 @@ class Analytics:
         """Two-factor fit on the FIT_WINDOW sessions before the period:
         r = a + b_mkt * SPY + b_sec * (sectorETF - SPY)."""
         r = self.returns
-        lo = max(1, w.start_pos - FIT_WINDOW + 1)
+        # Skip the back-filled flat stretch before a stock started trading; a
+        # genuine unchanged close (return 0) is real data and stays in.
+        lo = max(1, w.start_pos - FIT_WINDOW + 1, self.listed_pos.get(sym, 0) + 1)
         hi = w.start_pos + 1  # returns up to and including the period's start close
         y = r[sym].iloc[lo:hi].to_numpy()
         m = r[MARKET].iloc[lo:hi].to_numpy()
@@ -347,7 +352,7 @@ class Analytics:
         if etf:
             cols.append(r[etf].iloc[lo:hi].to_numpy() - m)
         X = np.column_stack(cols)
-        ok = np.isfinite(y) & np.isfinite(X).all(axis=1) & (y != 0)
+        ok = np.isfinite(y) & np.isfinite(X).all(axis=1)
         if ok.sum() < MIN_FIT_OBS:
             return {"alpha": 0.0, "beta_mkt": 1.0, "beta_sector": 0.0, "etf": etf,
                     "obs": int(ok.sum()), "fallback": True}
